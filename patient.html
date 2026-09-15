@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Patient Detail</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <a href="index.html">&larr; Back to list</a>
+  <h1 id="patientName">Loading...</h1>
+  <p id="patientInfo"></p>
+
+  <div id="slotsContainer"></div>
+
+  <hr>
+  <h3>Discharge</h3>
+  <button onclick="triggerCapture('Discharge Photo')">Capture Discharge Photo</button>
+  <p id="dischargeStatus"></p>
+
+  <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
+
+  <script>
+    const SUPABASE_URL = "https://drsvjggsrpibkczldahl.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const params = new URLSearchParams(window.location.search);
+    const mrd = params.get('mrd');
+    let currentUserEmail = "";
+    let activeSlotType = "";
+    let patientCategory = "";
+    const today = new Date().toISOString().split('T')[0];
+
+    async function init() {
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      if (!sessionData.session) {
+        window.location.href = "index.html";
+        return;
+      }
+      currentUserEmail = sessionData.session.user.email;
+
+      const { data: patient, error } = await supabaseClient
+        .from('Patients')
+        .select('*')
+        .eq('mrd', mrd)
+        .single();
+
+      if (error || !patient) {
+        document.getElementById('patientName').innerText = "Patient not found";
+        return;
+      }
+
+      document.getElementById('patientName').innerText = patient.name;
+      document.getElementById('patientInfo').innerText =
+        `MRD: ${patient.mrd} | Ward: ${patient.ward} | Bed: ${patient.bed_no} | Category: ${patient.patient_category}`;
+      patientCategory = patient.patient_category;
+
+      if (patient.is_discharged) {
+        document.getElementById('dischargeStatus').innerText = "Patient already discharged on " + patient.discharge_date;
+      }
+
+      renderSlots();
+      loadTodayStatus();
+    }
+
+    function renderSlots() {
+      let slotTypes = [];
+      if (patientCategory === "General") {
+        slotTypes = ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart", "Extra1", "Extra2"];
+      } else {
+        slotTypes = ["Before Procedure", "During Procedure", "After Procedure", "Extra1", "Extra2"];
+      }
+
+      const container = document.getElementById('slotsContainer');
+      container.innerHTML = slotTypes.map(type => `
+        <div id="slot-${type}" style="border:1px solid #ccc; padding:10px; margin:8px 0;">
+          <strong>${type}</strong>
+          <span id="status-${type}"> — Not captured</span><br>
+          <button onclick="triggerCapture('${type}')">Capture</button>
+        </div>
+      `).join('');
+    }
+
+    async function loadTodayStatus() {
+      const { data, error } = await supabaseClient
+        .from('daily_photos')
+        .select('*')
+        .eq('mrd', mrd)
+        .eq('photo_date', today);
+
+      if (!error && data) {
+        data.forEach(entry => {
+          const statusEl = document.getElementById('status-' + entry.photo_type);
+          if (statusEl) {
+            statusEl.innerText = " — Captured by " + entry.uploaded_by;
+          }
+          if (entry.photo_type === "Discharge Photo") {
+            document.getElementById('dischargeStatus').innerText = "Captured by " + entry.uploaded_by;
+          }
+        });
+      }
+    }
+
+    function triggerCapture(slotType) {
+      activeSlotType = slotType;
+      document.getElementById('fileInput').click();
+    }
+
+    document.getElementById('fileInput').addEventListener('change', async function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      let geoText = "";
+      if (activeSlotType === "Patient Photo") {
+        geoText = await getLocation();
+      }
+
+      let uploadFile = file;
+      let fileType = "image";
+      let fileExt = "jpg";
+
+      if (activeSlotType !== "Patient Photo" && activeSlotType !== "Discharge Photo") {
+        uploadFile = await convertImageToPdf(file);
+        fileType = "pdf";
+        fileExt = "pdf";
+      }
+
+      const filePath = `${mrd}/${today}/${activeSlotType}-${Date.now()}.${fileExt}`;
+      const { data: uploadData, error: uploadError } = await supabaseClient.storage
+        .from('patient-photos')
+        .upload(filePath, uploadFile);
+
+      if (uploadError) {
+        alert("Upload failed: " + uploadError.message);
+        return;
+      }
+
+      const { error: insertError } = await supabaseClient
+        .from('daily_photos')
+        .insert([{
+          mrd: mrd,
+          photo_date: today,
+          photo_type: activeSlotType,
+          photo_url: filePath,
+          file_type: fileType,
+          geo_location: geoText,
+          uploaded_by: currentUserEmail
+        }]);
+
+      if (insertError) {
+        alert("Save failed: " + insertError.message);
+        return;
+      }
+
+      if (activeSlotType === "Discharge Photo") {
+        await supabaseClient
+          .from('Patients')
+          .update({ is_discharged: true, discharge_date: today })
+          .eq('mrd', mrd);
+        document.getElementById('dischargeStatus').innerText = "Captured by " + currentUserEmail;
+      } else {
+        const statusEl = document.getElementById('status-' + activeSlotType);
+        if (statusEl) statusEl.innerText = " — Captured by " + currentUserEmail;
+      }
+
+      alert(activeSlotType + " saved successfully!");
+      e.target.value = "";
+    });
+
+    function getLocation() {
+      return new Promise((resolve) => {
+        if (!navigator.geolocation) {
+          resolve("Location not supported");
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve(pos.coords.latitude + "," + pos.coords.longitude),
+          () => resolve("Location permission denied")
+        );
+      });
+    }
+
+    function convertImageToPdf(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          const img = new Image();
+          img.onload = function() {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = (img.height * pageWidth) / img.width;
+            pdf.addImage(event.target.result, 'JPEG', 0, 0, pageWidth, pageHeight);
+            const pdfBlob = pdf.output('blob');
+            resolve(pdfBlob);
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
