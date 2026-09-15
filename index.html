@@ -17,7 +17,24 @@
 
   <div id="list-box" style="display:none;">
     <h2>Patients</h2>
-    <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()">
+    <button onclick="toggleAddForm()">+ Add New Patient</button>
+    <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()"><br><br>
+
+    <div id="addForm" style="display:none; border:1px solid #999; padding:10px; margin:10px 0;">
+      <h3>New Patient</h3>
+      <input type="text" id="newMrd" placeholder="MRD / Registration ID"><br><br>
+      <input type="text" id="newName" placeholder="Patient Name"><br><br>
+      <input type="text" id="newWard" placeholder="Ward"><br><br>
+      <input type="text" id="newBed" placeholder="Bed No."><br><br>
+      <input type="date" id="newAdmissionDate"><br><br>
+      <select id="newCategory">
+        <option value="General">General</option>
+        <option value="OT/Dialysis">OT/Dialysis</option>
+      </select><br><br>
+      <button onclick="addPatient()">Save Patient</button>
+      <p id="addMessage"></p>
+    </div>
+
     <div id="patientList"></div>
   </div>
 
@@ -39,6 +56,42 @@
       } else {
         document.getElementById('login-box').style.display = "none";
         document.getElementById('list-box').style.display = "block";
+        loadPatients();
+      }
+    }
+
+    function toggleAddForm() {
+      const form = document.getElementById('addForm');
+      form.style.display = form.style.display === "none" ? "block" : "none";
+    }
+
+    async function addPatient() {
+      const mrd = document.getElementById('newMrd').value;
+      const name = document.getElementById('newName').value;
+      const ward = document.getElementById('newWard').value;
+      const bed_no = document.getElementById('newBed').value;
+      const admission_date = document.getElementById('newAdmissionDate').value;
+      const patient_category = document.getElementById('newCategory').value;
+      const addMessage = document.getElementById('addMessage');
+
+      if (!mrd || !name) {
+        addMessage.innerText = "MRD and Name are required.";
+        return;
+      }
+
+      const { error } = await supabaseClient
+        .from('Patients')
+        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, is_discharged: false }]);
+
+      if (error) {
+        addMessage.innerText = "Error: " + error.message;
+      } else {
+        addMessage.innerText = "Patient added!";
+        document.getElementById('newMrd').value = "";
+        document.getElementById('newName').value = "";
+        document.getElementById('newWard').value = "";
+        document.getElementById('newBed').value = "";
+        document.getElementById('newAdmissionDate').value = "";
         loadPatients();
       }
     }
@@ -65,6 +118,7 @@
         <div style="border:1px solid #ccc; padding:10px; margin:8px 0;">
           <strong>${p.name}</strong> (MRD: ${p.mrd})<br>
           Ward: ${p.ward} | Bed: ${p.bed_no}<br>
+          Category: ${p.patient_category || "-"}<br>
           Status: ${p.is_discharged ? "Discharged" : "Active"}
         </div>
       `).join('');
