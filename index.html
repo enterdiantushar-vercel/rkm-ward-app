@@ -47,7 +47,7 @@
       const resultBox = document.getElementById('patientResult');
 
       const { data, error } = await supabaseClient
-        .from('patients')
+        .from('Patients')
         .select('*')
         .eq('mrd', mrd)
         .single();
