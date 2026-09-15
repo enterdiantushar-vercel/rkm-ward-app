@@ -15,17 +15,18 @@
     <p id="message"></p>
   </div>
 
-  <div id="search-box" style="display:none;">
-    <h2>Search Patient</h2>
-    <input type="text" id="searchInput" placeholder="Enter MRD / Registration ID">
-    <button onclick="searchPatient()">Search</button>
-    <div id="patientResult"></div>
+  <div id="list-box" style="display:none;">
+    <h2>Patients</h2>
+    <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()">
+    <div id="patientList"></div>
   </div>
 
   <script>
     const SUPABASE_URL = "https://drsvjggsrpibkczldahl.supabase.co";
     const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let allPatients = [];
 
     async function login() {
       const email = document.getElementById('email').value;
@@ -36,35 +37,45 @@
       if (error) {
         messageBox.innerText = "Login failed: " + error.message;
       } else {
-        messageBox.innerText = "Login successful! Welcome, " + data.user.email;
         document.getElementById('login-box').style.display = "none";
-        document.getElementById('search-box').style.display = "block";
+        document.getElementById('list-box').style.display = "block";
+        loadPatients();
       }
     }
 
-    async function searchPatient() {
-      const mrd = document.getElementById('searchInput').value;
-      const resultBox = document.getElementById('patientResult');
-
+    async function loadPatients() {
       const { data, error } = await supabaseClient
         .from('Patients')
         .select('*')
-        .eq('mrd', mrd)
-        .single();
+        .order('name', { ascending: true });
 
-      if (error || !data) {
-        resultBox.innerHTML = "<p>No patient found with that ID.</p>";
-      } else {
-        resultBox.innerHTML = `
-          <h3>${data.name}</h3>
-          <p>MRD: ${data.mrd}</p>
-          <p>Ward: ${data.ward}</p>
-          <p>Bed No: ${data.bed_no}</p>
-          <p>Admission Date: ${data.admission_date}</p>
-          <p>Category: ${data.patient_category}</p>
-          <p>Status: ${data.is_discharged ? "Discharged" : "Active"}</p>
-        `;
+      if (!error && data) {
+        allPatients = data;
+        renderList(allPatients);
       }
+    }
+
+    function renderList(patients) {
+      const listDiv = document.getElementById('patientList');
+      if (patients.length === 0) {
+        listDiv.innerHTML = "<p>No patients found.</p>";
+        return;
+      }
+      listDiv.innerHTML = patients.map(p => `
+        <div style="border:1px solid #ccc; padding:10px; margin:8px 0;">
+          <strong>${p.name}</strong> (MRD: ${p.mrd})<br>
+          Ward: ${p.ward} | Bed: ${p.bed_no}<br>
+          Status: ${p.is_discharged ? "Discharged" : "Active"}
+        </div>
+      `).join('');
+    }
+
+    function filterList() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
+      const filtered = allPatients.filter(p =>
+        p.name.toLowerCase().includes(query) || p.mrd.toLowerCase().includes(query)
+      );
+      renderList(filtered);
     }
   </script>
 </body>
