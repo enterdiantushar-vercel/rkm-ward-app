@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>RKM Patient App - Login</title>
+  <title>RKM Patient App</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -13,6 +13,13 @@
     <input type="password" id="password" placeholder="Password"><br><br>
     <button onclick="login()">Login</button>
     <p id="message"></p>
+  </div>
+
+  <div id="search-box" style="display:none;">
+    <h2>Search Patient</h2>
+    <input type="text" id="searchInput" placeholder="Enter MRD / Registration ID">
+    <button onclick="searchPatient()">Search</button>
+    <div id="patientResult"></div>
   </div>
 
   <script>
@@ -30,6 +37,33 @@
         messageBox.innerText = "Login failed: " + error.message;
       } else {
         messageBox.innerText = "Login successful! Welcome, " + data.user.email;
+        document.getElementById('login-box').style.display = "none";
+        document.getElementById('search-box').style.display = "block";
+      }
+    }
+
+    async function searchPatient() {
+      const mrd = document.getElementById('searchInput').value;
+      const resultBox = document.getElementById('patientResult');
+
+      const { data, error } = await supabaseClient
+        .from('patients')
+        .select('*')
+        .eq('mrd', mrd)
+        .single();
+
+      if (error || !data) {
+        resultBox.innerHTML = "<p>No patient found with that ID.</p>";
+      } else {
+        resultBox.innerHTML = `
+          <h3>${data.name}</h3>
+          <p>MRD: ${data.mrd}</p>
+          <p>Ward: ${data.ward}</p>
+          <p>Bed No: ${data.bed_no}</p>
+          <p>Admission Date: ${data.admission_date}</p>
+          <p>Category: ${data.patient_category}</p>
+          <p>Status: ${data.is_discharged ? "Discharged" : "Active"}</p>
+        `;
       }
     }
   </script>
