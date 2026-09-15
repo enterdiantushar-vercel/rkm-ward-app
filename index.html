@@ -116,13 +116,15 @@
         listDiv.innerHTML = "<p>No patients found.</p>";
         return;
       }
-      listDiv.innerHTML = patients.map(p => `
-        <div style="border:1px solid #ccc; padding:10px; margin:8px 0;">
-          <strong>${p.name}</strong> (MRD: ${p.mrd})<br>
-          Ward: ${p.ward} | Bed: ${p.bed_no}<br>
-          Category: ${p.patient_category || "-"}<br>
-          Status: ${p.is_discharged ? "Discharged" : "Active"}
-        </div>
+            listDiv.innerHTML = patients.map(p => `
+        <a href="patient.html?mrd=${p.mrd}" style="text-decoration:none; color:black;">
+          <div style="border:1px solid #ccc; padding:10px; margin:8px 0;">
+            <strong>${p.name}</strong> (MRD: ${p.mrd})<br>
+            Ward: ${p.ward} | Bed: ${p.bed_no}<br>
+            Category: ${p.patient_category || "-"}<br>
+            Status: ${p.is_discharged ? "Discharged" : "Active"}
+          </div>
+        </a>
       `).join('');
     }
 
