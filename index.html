@@ -185,20 +185,21 @@
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
 
-    function filterList() {
-  const query = document.getElementById('searchInput').value.toLowerCase();
+       function filterList() {
+      const query = document.getElementById('searchInput').value.toLowerCase();
 
-  const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
+      const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
+      const selectedCategories = Array.from(document.querySelectorAll('#categoryCheckboxes input:checked')).map(cb => cb.value);
 
-  const filtered = allPatients.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(query) || p.mrd.toLowerCase().includes(query);
-    const matchesWard = selectedWards.length === 0 || selectedWards.includes(p.ward);
-    const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(p.patient_category);
-    return matchesSearch && matchesWard && matchesCategory;
-  });
+      const filtered = allPatients.filter(p => {
+        const matchesSearch = p.name.toLowerCase().includes(query) || p.mrd.toLowerCase().includes(query);
+        const matchesWard = selectedWards.length === 0 || selectedWards.includes(p.ward);
+        const matchesCategory = selectedCategories.length === 0 || selectedCategories.includes(p.patient_category);
+        return matchesSearch && matchesWard && matchesCategory;
+      });
 
-  renderList(filtered);
-}
+      renderList(filtered);
+    }
 
 function clearFilters() {
   document.getElementById('searchInput').value = "";
