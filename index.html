@@ -19,37 +19,37 @@
     <h2>Patients</h2>
     <button onclick="toggleAddForm()">+ Add New Patient</button>
     <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()"><br><br>
-     <div style="margin: 10px 0;">
+        <div style="margin: 10px 0;">
   <strong>Filter by Ward:</strong><br>
-  <select id="wardFilter" multiple size="6" onchange="filterList()" style="width:150px;">
-    <option value="A1">A1</option>
-    <option value="A2">A2</option>
-    <option value="A3">A3</option>
-    <option value="B1">B1</option>
-    <option value="B2">B2</option>
-    <option value="B3">B3</option>
-    <option value="C2">C2</option>
-    <option value="C3">C3</option>
-    <option value="C5">C5</option>
-    <option value="PWM">PWM</option>
-    <option value="PWS">PWS</option>
-    <option value="GE">GE</option>
-    <option value="CW">CW</option>
-    <option value="EXT CW">EXT CW</option>
-    <option value="CCU">CCU</option>
-    <option value="ICU">ICU</option>
-    <option value="HDUII">HDUII</option>
-  </select>
+  <div id="wardCheckboxes">
+    <label><input type="checkbox" value="A1" onchange="filterList()"> A1</label>
+    <label><input type="checkbox" value="A2" onchange="filterList()"> A2</label>
+    <label><input type="checkbox" value="A3" onchange="filterList()"> A3</label>
+    <label><input type="checkbox" value="B1" onchange="filterList()"> B1</label>
+    <label><input type="checkbox" value="B2" onchange="filterList()"> B2</label>
+    <label><input type="checkbox" value="B3" onchange="filterList()"> B3</label>
+    <label><input type="checkbox" value="C2" onchange="filterList()"> C2</label>
+    <label><input type="checkbox" value="C3" onchange="filterList()"> C3</label>
+    <label><input type="checkbox" value="C5" onchange="filterList()"> C5</label>
+    <label><input type="checkbox" value="PWM" onchange="filterList()"> PWM</label>
+    <label><input type="checkbox" value="PWS" onchange="filterList()"> PWS</label>
+    <label><input type="checkbox" value="GE" onchange="filterList()"> GE</label>
+    <label><input type="checkbox" value="CW" onchange="filterList()"> CW</label>
+    <label><input type="checkbox" value="EXT CW" onchange="filterList()"> EXT CW</label>
+    <label><input type="checkbox" value="CCU" onchange="filterList()"> CCU</label>
+    <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
+    <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
+  </div>
 
-  <strong style="margin-left:20px;">Filter by Category:</strong><br>
-  <select id="categoryFilter" multiple size="4" onchange="filterList()" style="width:150px;">
-    <option value="Medicine">Medicine</option>
-    <option value="OT">OT</option>
-    <option value="Dialysis">Dialysis</option>
-    <option value="Chemo">Chemo</option>
-  </select>
+  <strong>Filter by Category:</strong><br>
+  <div id="categoryCheckboxes">
+    <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
+    <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
+    <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
+    <label><input type="checkbox" value="Chemo" onchange="filterList()"> Chemo</label>
+  </div>
 
-  <br><button onclick="clearFilters()">Clear Filters</button>
+  <button onclick="clearFilters()">Clear Filters</button>
 </div>
     <div id="addForm" style="display:none; border:1px solid #999; padding:10px; margin:10px 0;">
       <h3>New Patient</h3>
@@ -178,14 +178,11 @@
       `).join('');
     }
 
-    function filterList() {
+       function filterList() {
   const query = document.getElementById('searchInput').value.toLowerCase();
 
-  const wardSelect = document.getElementById('wardFilter');
-  const selectedWards = Array.from(wardSelect.selectedOptions).map(o => o.value);
-
-  const categorySelect = document.getElementById('categoryFilter');
-  const selectedCategories = Array.from(categorySelect.selectedOptions).map(o => o.value);
+  const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
+  const selectedCategories = Array.from(document.querySelectorAll('#categoryCheckboxes input:checked')).map(cb => cb.value);
 
   const filtered = allPatients.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(query) || p.mrd.toLowerCase().includes(query);
@@ -199,8 +196,7 @@
 
 function clearFilters() {
   document.getElementById('searchInput').value = "";
-  document.getElementById('wardFilter').selectedIndex = -1;
-  document.getElementById('categoryFilter').selectedIndex = -1;
+  document.querySelectorAll('#wardCheckboxes input, #categoryCheckboxes input').forEach(cb => cb.checked = false);
   filterList();
 }
   </script>
