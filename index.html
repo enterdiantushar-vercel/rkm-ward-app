@@ -180,19 +180,15 @@
         </a>
       `).join('');
     }
-    function toggleFilters() {
+        function toggleFilters() {
       const panel = document.getElementById('filterPanel');
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
 
     function filterList() {
   const query = document.getElementById('searchInput').value.toLowerCase();
-  ...
-       function filterList() {
-  const query = document.getElementById('searchInput').value.toLowerCase();
 
   const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
-  const selectedCategories = Array.from(document.querySelectorAll('#categoryCheckboxes input:checked')).map(cb => cb.value);
 
   const filtered = allPatients.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(query) || p.mrd.toLowerCase().includes(query);
