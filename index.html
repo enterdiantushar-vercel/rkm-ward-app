@@ -19,37 +19,40 @@
     <h2>Patients</h2>
     <button onclick="toggleAddForm()">+ Add New Patient</button>
     <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()"><br><br>
-        <div style="margin: 10px 0;">
-  <strong>Filter by Ward:</strong><br>
-  <div id="wardCheckboxes">
-    <label><input type="checkbox" value="A1" onchange="filterList()"> A1</label>
-    <label><input type="checkbox" value="A2" onchange="filterList()"> A2</label>
-    <label><input type="checkbox" value="A3" onchange="filterList()"> A3</label>
-    <label><input type="checkbox" value="B1" onchange="filterList()"> B1</label>
-    <label><input type="checkbox" value="B2" onchange="filterList()"> B2</label>
-    <label><input type="checkbox" value="B3" onchange="filterList()"> B3</label>
-    <label><input type="checkbox" value="C2" onchange="filterList()"> C2</label>
-    <label><input type="checkbox" value="C3" onchange="filterList()"> C3</label>
-    <label><input type="checkbox" value="C5" onchange="filterList()"> C5</label>
-    <label><input type="checkbox" value="PWM" onchange="filterList()"> PWM</label>
-    <label><input type="checkbox" value="PWS" onchange="filterList()"> PWS</label>
-    <label><input type="checkbox" value="GE" onchange="filterList()"> GE</label>
-    <label><input type="checkbox" value="CW" onchange="filterList()"> CW</label>
-    <label><input type="checkbox" value="EXT CW" onchange="filterList()"> EXT CW</label>
-    <label><input type="checkbox" value="CCU" onchange="filterList()"> CCU</label>
-    <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
-    <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
-  </div>
+            <div style="margin: 10px 0;">
+  <button onclick="toggleFilters()" type="button">Filters ▾</button>
+  <div id="filterPanel" style="display:none; border:1px solid #999; padding:10px; margin-top:5px; max-width:400px;">
+    <strong>Filter by Ward:</strong><br>
+    <div id="wardCheckboxes">
+      <label><input type="checkbox" value="A1" onchange="filterList()"> A1</label>
+      <label><input type="checkbox" value="A2" onchange="filterList()"> A2</label>
+      <label><input type="checkbox" value="A3" onchange="filterList()"> A3</label>
+      <label><input type="checkbox" value="B1" onchange="filterList()"> B1</label>
+      <label><input type="checkbox" value="B2" onchange="filterList()"> B2</label>
+      <label><input type="checkbox" value="B3" onchange="filterList()"> B3</label>
+      <label><input type="checkbox" value="C2" onchange="filterList()"> C2</label>
+      <label><input type="checkbox" value="C3" onchange="filterList()"> C3</label>
+      <label><input type="checkbox" value="C5" onchange="filterList()"> C5</label>
+      <label><input type="checkbox" value="PWM" onchange="filterList()"> PWM</label>
+      <label><input type="checkbox" value="PWS" onchange="filterList()"> PWS</label>
+      <label><input type="checkbox" value="GE" onchange="filterList()"> GE</label>
+      <label><input type="checkbox" value="CW" onchange="filterList()"> CW</label>
+      <label><input type="checkbox" value="EXT CW" onchange="filterList()"> EXT CW</label>
+      <label><input type="checkbox" value="CCU" onchange="filterList()"> CCU</label>
+      <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
+      <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
+    </div>
 
-  <strong>Filter by Category:</strong><br>
-  <div id="categoryCheckboxes">
-    <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
-    <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
-    <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
-    <label><input type="checkbox" value="Chemo" onchange="filterList()"> Chemo</label>
-  </div>
+    <strong>Filter by Category:</strong><br>
+    <div id="categoryCheckboxes">
+      <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
+      <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
+      <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
+      <label><input type="checkbox" value="Chemo" onchange="filterList()"> Chemo</label>
+    </div>
 
-  <button onclick="clearFilters()">Clear Filters</button>
+    <button onclick="clearFilters()">Clear Filters</button>
+  </div>
 </div>
     <div id="addForm" style="display:none; border:1px solid #999; padding:10px; margin:10px 0;">
       <h3>New Patient</h3>
@@ -177,7 +180,14 @@
         </a>
       `).join('');
     }
+    function toggleFilters() {
+      const panel = document.getElementById('filterPanel');
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    }
 
+    function filterList() {
+  const query = document.getElementById('searchInput').value.toLowerCase();
+  ...
        function filterList() {
   const query = document.getElementById('searchInput').value.toLowerCase();
 
