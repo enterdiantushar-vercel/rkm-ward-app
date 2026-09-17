@@ -2,90 +2,207 @@
 <html>
 <head>
   <title>RKM Patient App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0;
+      background: #f4f6f8;
+      color: #1a1a1a;
+    }
+    .header {
+      background: #0d6e6e;
+      color: white;
+      padding: 16px 20px;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    #login-box {
+      background: white;
+      border-radius: 10px;
+      padding: 24px;
+      margin-top: 40px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    #login-box h2 {
+      margin-top: 0;
+    }
+    input[type="email"], input[type="password"], input[type="text"], input[type="date"], select {
+      width: 100%;
+      padding: 10px;
+      margin: 6px 0 12px 0;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 15px;
+    }
+    button {
+      background: #0d6e6e;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0a5555;
+    }
+    .top-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .top-actions input[type="text"] {
+      flex: 1;
+      min-width: 160px;
+      margin: 0;
+    }
+    #filterPanel {
+      background: white;
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    #filterPanel label {
+      display: inline-block;
+      margin: 4px 8px 4px 0;
+      font-size: 14px;
+    }
+    #addForm {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin: 12px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    #addForm h3 {
+      margin-top: 0;
+    }
+    .patient-card {
+      background: white;
+      border-radius: 8px;
+      padding: 14px;
+      margin: 10px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      border-left: 5px solid #ccc;
+      text-decoration: none;
+      color: #1a1a1a;
+      display: block;
+    }
+    .patient-card.complete { border-left-color: #2e8b57; background: #f2fbf5; }
+    .patient-card.incomplete { border-left-color: #d9822b; background: #fff9f2; }
+    .patient-name {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .patient-meta {
+      font-size: 13px;
+      color: #555;
+      margin: 4px 0;
+    }
+    .status-line {
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: 6px;
+    }
+    .status-complete { color: #2e8b57; }
+    .status-incomplete { color: #b3541e; }
+  </style>
 </head>
 <body>
-  <h1>RKM Patient Photo Tracking App</h1>
+  <div class="header"><h1>RKM Patient Photo Tracking App</h1></div>
+  <div class="container">
 
   <div id="login-box">
     <h2>Staff Login</h2>
-    <input type="email" id="email" placeholder="Email"><br><br>
-    <input type="password" id="password" placeholder="Password"><br><br>
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Password">
     <button onclick="login()">Login</button>
     <p id="message"></p>
   </div>
 
   <div id="list-box" style="display:none;">
-    <h2>Patients</h2>
-           <button onclick="toggleAddForm()">+ Add New Patient</button>
-    <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()"><br><br>
-            <div style="margin: 10px 0;">
-  <button onclick="toggleFilters()" type="button">Filters ▾</button>
-  <div id="filterPanel" style="display:none; border:1px solid #999; padding:10px; margin-top:5px; max-width:400px;">
-    <strong>Filter by Ward:</strong><br>
-    <div id="wardCheckboxes">
-      <label><input type="checkbox" value="A1" onchange="filterList()"> A1</label>
-      <label><input type="checkbox" value="A2" onchange="filterList()"> A2</label>
-      <label><input type="checkbox" value="A3" onchange="filterList()"> A3</label>
-      <label><input type="checkbox" value="B1" onchange="filterList()"> B1</label>
-      <label><input type="checkbox" value="B2" onchange="filterList()"> B2</label>
-      <label><input type="checkbox" value="B3" onchange="filterList()"> B3</label>
-      <label><input type="checkbox" value="C2" onchange="filterList()"> C2</label>
-      <label><input type="checkbox" value="C3" onchange="filterList()"> C3</label>
-      <label><input type="checkbox" value="C5" onchange="filterList()"> C5</label>
-      <label><input type="checkbox" value="PWM" onchange="filterList()"> PWM</label>
-      <label><input type="checkbox" value="PWS" onchange="filterList()"> PWS</label>
-      <label><input type="checkbox" value="GE" onchange="filterList()"> GE</label>
-      <label><input type="checkbox" value="CW" onchange="filterList()"> CW</label>
-      <label><input type="checkbox" value="EXT CW" onchange="filterList()"> EXT CW</label>
-      <label><input type="checkbox" value="CCU" onchange="filterList()"> CCU</label>
-      <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
-      <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
+    <h2 style="margin-top:0;">Patients</h2>
+    <div class="top-actions">
+      <button onclick="toggleAddForm()">+ Add New Patient</button>
+      <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()">
     </div>
 
-    <strong>Filter by Category:</strong><br>
-    <div id="categoryCheckboxes">
-      <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
-      <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
-      <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
-      <label><input type="checkbox" value="Chemo" onchange="filterList()"> Chemo</label>
+    <button onclick="toggleFilters()" type="button">Filters &#9662;</button>
+    <div id="filterPanel" style="display:none;">
+      <strong>Filter by Ward:</strong><br>
+      <div id="wardCheckboxes">
+        <label><input type="checkbox" value="A1" onchange="filterList()"> A1</label>
+        <label><input type="checkbox" value="A2" onchange="filterList()"> A2</label>
+        <label><input type="checkbox" value="A3" onchange="filterList()"> A3</label>
+        <label><input type="checkbox" value="B1" onchange="filterList()"> B1</label>
+        <label><input type="checkbox" value="B2" onchange="filterList()"> B2</label>
+        <label><input type="checkbox" value="B3" onchange="filterList()"> B3</label>
+        <label><input type="checkbox" value="C2" onchange="filterList()"> C2</label>
+        <label><input type="checkbox" value="C3" onchange="filterList()"> C3</label>
+        <label><input type="checkbox" value="C5" onchange="filterList()"> C5</label>
+        <label><input type="checkbox" value="PWM" onchange="filterList()"> PWM</label>
+        <label><input type="checkbox" value="PWS" onchange="filterList()"> PWS</label>
+        <label><input type="checkbox" value="GE" onchange="filterList()"> GE</label>
+        <label><input type="checkbox" value="CW" onchange="filterList()"> CW</label>
+        <label><input type="checkbox" value="EXT CW" onchange="filterList()"> EXT CW</label>
+        <label><input type="checkbox" value="CCU" onchange="filterList()"> CCU</label>
+        <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
+        <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
+      </div>
+      <br><strong>Filter by Category:</strong><br>
+      <div id="categoryCheckboxes">
+        <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
+        <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
+        <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
+        <label><input type="checkbox" value="Chemo" onchange="filterList()"> Chemo</label>
+      </div>
+      <br><button onclick="clearFilters()">Clear Filters</button>
     </div>
 
-    <button onclick="clearFilters()">Clear Filters</button>
-  </div>
-</div>
-    <div id="addForm" style="display:none; border:1px solid #999; padding:10px; margin:10px 0;">
+    <div id="addForm" style="display:none;">
       <h3>New Patient</h3>
-      <input type="text" id="newMrd" placeholder="MRD / Registration ID"><br><br>
-      <input type="text" id="newName" placeholder="Patient Name"><br><br>
+      <input type="text" id="newMrd" placeholder="MRD / Registration ID">
+      <input type="text" id="newName" placeholder="Patient Name">
       <select id="newWard">
-  <option value="">Select Ward</option>
-  <option value="A1">A1</option>
-  <option value="A2">A2</option>
-  <option value="A3">A3</option>
-  <option value="B1">B1</option>
-  <option value="B2">B2</option>
-  <option value="B3">B3</option>
-  <option value="C2">C2</option>
-  <option value="C3">C3</option>
-  <option value="C5">C5</option>
-  <option value="PWM">PWM</option>
-  <option value="PWS">PWS</option>
-  <option value="GE">GE</option>
-  <option value="CW">CW</option>
-  <option value="EXT CW">EXT CW</option>
-  <option value="CCU">CCU</option>
-  <option value="ICU">ICU</option>
-  <option value="HDUII">HDUII</option>
-</select><br><br>
-      <input type="text" id="newBed" placeholder="Bed No."><br><br>
-      <input type="date" id="newAdmissionDate"><br><br>
+        <option value="">Select Ward</option>
+        <option value="A1">A1</option>
+        <option value="A2">A2</option>
+        <option value="A3">A3</option>
+        <option value="B1">B1</option>
+        <option value="B2">B2</option>
+        <option value="B3">B3</option>
+        <option value="C2">C2</option>
+        <option value="C3">C3</option>
+        <option value="C5">C5</option>
+        <option value="PWM">PWM</option>
+        <option value="PWS">PWS</option>
+        <option value="GE">GE</option>
+        <option value="CW">CW</option>
+        <option value="EXT CW">EXT CW</option>
+        <option value="CCU">CCU</option>
+        <option value="ICU">ICU</option>
+        <option value="HDUII">HDUII</option>
+      </select>
+      <input type="text" id="newBed" placeholder="Bed No.">
+      <input type="date" id="newAdmissionDate">
       <select id="newCategory">
-      <option value="Medicine">Medicine</option>
-      <option value="OT">OT</option>
-      <option value="Dialysis">Dialysis</option>
-     <option value="Chemo">Chemo</option>
-</select><br><br>
+        <option value="Medicine">Medicine</option>
+        <option value="OT">OT</option>
+        <option value="Dialysis">Dialysis</option>
+        <option value="Chemo">Chemo</option>
+      </select>
       <button onclick="addPatient()">Save Patient</button>
       <p id="addMessage"></p>
     </div>
@@ -93,12 +210,14 @@
     <div id="patientList"></div>
   </div>
 
+  </div>
+
   <script>
     const SUPABASE_URL = "https://drsvjggsrpibkczldahl.supabase.co";
     const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-            let allPatients = [];
+    let allPatients = [];
     let allPhotosToday = [];
 
     const REQUIRED_SLOTS = {
@@ -138,6 +257,11 @@
       form.style.display = form.style.display === "none" ? "block" : "none";
     }
 
+    function toggleFilters() {
+      const panel = document.getElementById('filterPanel');
+      panel.style.display = panel.style.display === "none" ? "block" : "none";
+    }
+
     async function addPatient() {
       const mrd = document.getElementById('newMrd').value;
       const name = document.getElementById('newName').value;
@@ -169,7 +293,7 @@
       }
     }
 
-        async function loadPatients() {
+    async function loadPatients() {
       const { data, error } = await supabaseClient
         .from('Patients')
         .select('*')
@@ -207,7 +331,7 @@
       return { done: required.length - missing.length, total: required.length, missing: missing, isDaily: isDaily };
     }
 
-        function renderList(patients) {
+    function renderList(patients) {
       const listDiv = document.getElementById('patientList');
       if (patients.length === 0) {
         listDiv.innerHTML = "<p>No patients found.</p>";
@@ -216,35 +340,29 @@
       listDiv.innerHTML = patients.map(p => {
         const status = getPatientStatus(p);
         let trackingHtml = "";
+        let cardClass = "";
         if (status) {
           const label = status.isDaily ? "today" : "overall";
           if (status.missing.length === 0) {
-            trackingHtml = `<span style="color:#006600;">${status.done}/${status.total} done ${label} — All complete</span>`;
+            trackingHtml = `<div class="status-line status-complete">${status.done}/${status.total} done ${label} — All complete</div>`;
+            cardClass = "complete";
           } else {
-            trackingHtml = `<span style="color:#b30000;">${status.done}/${status.total} done ${label} — Missing: ${status.missing.join(", ")}</span>`;
+            trackingHtml = `<div class="status-line status-incomplete">${status.done}/${status.total} done ${label} — Missing: ${status.missing.join(", ")}</div>`;
+            cardClass = "incomplete";
           }
         }
-        const bgColor = status ? (status.missing.length === 0 ? "#e6ffe6" : "#fff0e6") : "#f2f2f2";
 
         return `
-          <a href="patient.html?mrd=${p.mrd}" style="text-decoration:none; color:black;">
-            <div style="border:1px solid #ccc; padding:10px; margin:8px 0; background:${bgColor};">
-              <strong>${p.name}</strong> (MRD: ${p.mrd})<br>
-              Ward: ${p.ward} | Bed: ${p.bed_no}<br>
-              Category: ${p.patient_category || "-"}<br>
-              Status: ${p.is_discharged ? "Discharged" : "Active"}<br>
-              ${trackingHtml}
-            </div>
+          <a href="patient.html?mrd=${p.mrd}" class="patient-card ${cardClass}">
+            <div class="patient-name">${p.name} <span style="font-weight:400; color:#777;">(MRD: ${p.mrd})</span></div>
+            <div class="patient-meta">Ward: ${p.ward} | Bed: ${p.bed_no} | ${p.patient_category || "-"} | ${p.is_discharged ? "Discharged" : "Active"}</div>
+            ${trackingHtml}
           </a>
         `;
       }).join('');
     }
-        function toggleFilters() {
-      const panel = document.getElementById('filterPanel');
-      panel.style.display = panel.style.display === "none" ? "block" : "none";
-    }
 
-       function filterList() {
+    function filterList() {
       const query = document.getElementById('searchInput').value.toLowerCase();
 
       const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
@@ -260,11 +378,11 @@
       renderList(filtered);
     }
 
-function clearFilters() {
-  document.getElementById('searchInput').value = "";
-  document.querySelectorAll('#wardCheckboxes input, #categoryCheckboxes input').forEach(cb => cb.checked = false);
-  filterList();
-}
+    function clearFilters() {
+      document.getElementById('searchInput').value = "";
+      document.querySelectorAll('#wardCheckboxes input, #categoryCheckboxes input').forEach(cb => cb.checked = false);
+      filterList();
+    }
   </script>
 </body>
 </html>
