@@ -84,7 +84,7 @@
       `).join('');
     }
 
-       let photoPaths = {};
+           let allPhotoEntries = [];
 
     async function loadTodayStatus() {
       const { data, error } = await supabaseClient
@@ -95,26 +95,44 @@
         .order('uploaded_at', { ascending: true });
 
       if (!error && data) {
-        data.forEach(entry => {
-          photoPaths[entry.photo_type] = entry.photo_url;
+        allPhotoEntries = data;
+        const grouped = {};
+        data.forEach((entry, idx) => {
+          if (!grouped[entry.photo_type]) grouped[entry.photo_type] = [];
+          grouped[entry.photo_type].push(idx);
+        });
 
-          const statusEl = document.getElementById('status-' + entry.photo_type);
-          if (statusEl) {
-            statusEl.innerHTML = ' — Captured by ' + entry.uploaded_by + ' <button onclick="viewPhoto(\'' + entry.photo_type + '\')">View</button>';
-          }
-          if (entry.photo_type === "Discharge Photo") {
-            document.getElementById('dischargeStatus').innerHTML = 'Captured by ' + entry.uploaded_by + ' <button onclick="viewPhoto(\'Discharge Photo\')">View</button>';
+        Object.keys(grouped).forEach(type => {
+          const indexes = grouped[type];
+          const lastEntry = data[indexes[indexes.length - 1]];
+          const links = indexes.map(idx => {
+            const time = new Date(data[idx].uploaded_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+            return '<button onclick="viewPhotoByIndex(' + idx + ')">' + time + '</button>';
+          }).join(' ');
+
+          if (type === "Discharge Photo") {
+            document.getElementById('dischargeStatus').innerHTML =
+              'Captured by ' + lastEntry.uploaded_by + ' | ' + links;
+          } else {
+            const statusEl = document.getElementById('status-' + type);
+            if (statusEl) {
+              statusEl.innerHTML = ' — ' + indexes.length + ' capture(s), last by ' + lastEntry.uploaded_by + ' | ' + links;
+            }
           }
         });
       }
     }
 
-    async function viewPhoto(slotType) {
-      const path = photoPaths[slotType];
-      if (!path) {
+    function viewPhotoByIndex(idx) {
+      const entry = allPhotoEntries[idx];
+      if (!entry) {
         alert("File not found.");
         return;
       }
+      openSignedUrl(entry.photo_url);
+    }
+
+    async function openSignedUrl(path) {
       const { data, error } = await supabaseClient.storage
         .from('patient-photos')
         .createSignedUrl(path, 300);
