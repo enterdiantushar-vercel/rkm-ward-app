@@ -127,17 +127,14 @@
         geoStoreText = loc.text;
 
         let address = null;
-        let mapDataUrl = null;
 
         if (lat !== null && lon !== null) {
           statusEl.innerText = "Fetching address...";
           address = await getAddress(lat, lon);
-          statusEl.innerText = "Fetching map...";
-          mapDataUrl = await getMapThumbnail(lat, lon);
         }
 
         statusEl.innerText = "Preparing document...";
-        pdfBlob = await buildGeotaggedPdf(file, lat, lon, address, mapDataUrl, 1280, 0.7);
+        pdfBlob = await buildGeotaggedPdf(file, lat, lon, address, 1280, 0.7);
       } else {
         statusEl.innerText = "Preparing document...";
         pdfBlob = await buildDocumentPdf(file, 1280, 0.75);
@@ -211,23 +208,12 @@
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`);
         const data = await res.json();
-        return data.display_name || null;
-      } catch (err) {
-        return null;
-      }
-    }
-
-    async function getMapThumbnail(lat, lon) {
-      try {
-        const url = `https://staticmap.openstreetmap.de/staticmap.php?center=${lat},${lon}&zoom=16&size=200x200&maptype=mapnik&markers=${lat},${lon},red-pushpin`;
-        const res = await fetch(url);
-        const blob = await res.blob();
-        return await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(blob);
-        });
+        const addr = data.address || {};
+        const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
+        const state = addr.state || "";
+        const country = addr.country || "";
+        const shortLine = [city, state, country].filter(Boolean).join(", ");
+        return { full: data.display_name || null, short: shortLine || null };
       } catch (err) {
         return null;
       }
@@ -258,34 +244,50 @@
       });
     }
 
-    async function buildGeotaggedPdf(file, lat, lon, address, mapDataUrl, maxWidth, quality) {
+    async function buildGeotaggedPdf(file, lat, lon, address, maxWidth, quality) {
       const { canvas, ctx, width, height } = await loadImageToCanvas(file, maxWidth);
 
       const now = new Date();
-      const lines = [];
-      lines.push(address ? address : (lat !== null ? "Address unavailable" : "Location unavailable"));
-      if (lat !== null && lon !== null) {
-        lines.push(`Lat ${lat.toFixed(6)}, Long ${lon.toFixed(6)}`);
+      const headingText = (address && address.short) ? address.short : (lat !== null ? "Location captured" : "Location unavailable");
+      const bodyLines = [];
+      if (address && address.full) {
+        bodyLines.push(address.full);
       }
-      lines.push(now.toLocaleString());
+      if (lat !== null && lon !== null) {
+        bodyLines.push(`Lat ${lat.toFixed(6)}, Long ${lon.toFixed(6)}`);
+      }
+      bodyLines.push(now.toLocaleString());
 
-      const fontSize = Math.max(13, Math.round(width * 0.022));
-      ctx.font = fontSize + "px Arial";
-      const lineHeight = fontSize + 4;
+      const headingSize = Math.max(16, Math.round(width * 0.028));
+      const bodySize = Math.max(12, Math.round(width * 0.018));
+      const lineGap = 4;
       const padding = 8;
-      let maxLineWidth = 0;
-      lines.forEach(line => {
+
+      ctx.font = `bold ${headingSize}px Arial`;
+      let maxLineWidth = ctx.measureText(headingText).width;
+
+      ctx.font = `${bodySize}px Arial`;
+      bodyLines.forEach(line => {
         const w = ctx.measureText(line).width;
         if (w > maxLineWidth) maxLineWidth = w;
       });
-      const boxHeight = lines.length * lineHeight + padding * 2;
+
+      const headingHeight = headingSize + lineGap;
+      const bodyHeight = bodyLines.length * (bodySize + lineGap);
+      const boxHeight = headingHeight + bodyHeight + padding * 2;
 
       ctx.fillStyle = "rgba(0,0,0,0.6)";
       ctx.fillRect(0, height - boxHeight, maxLineWidth + padding * 2, boxHeight);
 
+      let cursorY = height - boxHeight + padding + headingSize;
       ctx.fillStyle = "white";
-      lines.forEach((line, i) => {
-        ctx.fillText(line, padding, height - boxHeight + padding + fontSize + i * lineHeight - 4);
+      ctx.font = `bold ${headingSize}px Arial`;
+      ctx.fillText(headingText, padding, cursorY);
+
+      ctx.font = `${bodySize}px Arial`;
+      bodyLines.forEach(line => {
+        cursorY += bodySize + lineGap;
+        ctx.fillText(line, padding, cursorY);
       });
 
       const dataUrl = canvas.toDataURL('image/jpeg', quality);
@@ -295,11 +297,6 @@
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = (height * pageWidth) / width;
       pdf.addImage(dataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
-
-      if (mapDataUrl) {
-        const thumbSize = 30;
-        pdf.addImage(mapDataUrl, 'PNG', pageWidth - thumbSize - 5, 5, thumbSize, thumbSize);
-      }
 
       return pdf.output('blob');
     }
