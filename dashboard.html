@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Tracking Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <a href="index.html">&larr; Back to list</a>
+  <h1>Tracking Dashboard</h1>
+  <p id="summary"></p>
+  <div id="dashboardList">Loading...</div>
+
+  <script>
+    const SUPABASE_URL = "https://drsvjggsrpibkczldahl.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const REQUIRED_SLOTS = {
+      "Medicine": ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart"],
+      "OT": ["Before Procedure", "During Procedure", "After Procedure"],
+      "Dialysis": ["Before Procedure", "During Procedure", "After Procedure"],
+      "Chemo": ["Before Procedure", "During Procedure", "After Procedure"]
+    };
+
+    async function init() {
+      const { data: sessionData } = await supabaseClient.auth.getSession();
+      if (!sessionData.session) {
+        window.location.href = "index.html";
+        return;
+      }
+
+      const { data: patients, error: patientError } = await supabaseClient
+        .from('Patients')
+        .select('*')
+        .eq('is_discharged', false);
+
+      const { data: allPhotos, error: photoError } = await supabaseClient
+        .from('daily_photos')
+        .select('*');
+
+      if (patientError || photoError || !patients) {
+        document.getElementById('dashboardList').innerText = "Error loading dashboard.";
+        return;
+      }
+
+      const results = patients.map(p => {
+        const required = REQUIRED_SLOTS[p.patient_category] || [];
+        const isDaily = p.patient_category === "Medicine";
+
+        const patientPhotos = allPhotos.filter(ph => ph.mrd === p.mrd);
+        const relevantPhotos = isDaily
+          ? patientPhotos.filter(ph => ph.photo_date === today)
+          : patientPhotos;
+
+        const capturedTypes = new Set(relevantPhotos.map(ph => ph.photo_type));
+        const missing = required.filter(slot => !capturedTypes.has(slot));
+
+        return {
+          patient: p,
+          required: required.length,
+          done: required.length - missing.length,
+          missing: missing,
+          isDaily: isDaily
+        };
+      });
+
+      results.sort((a, b) => (b.missing.length - a.missing.length) || a.patient.name.localeCompare(b.patient.name));
+
+      const completeCount = results.filter(r => r.missing.length === 0).length;
+      document.getElementById('summary').innerText =
+        `${completeCount} of ${results.length} active patients complete for today.`;
+
+      const listDiv = document.getElementById('dashboardList');
+      if (results.length === 0) {
+        listDiv.innerHTML = "<p>No active patients.</p>";
+        return;
+      }
+
+      listDiv.innerHTML = results.map(r => {
+        const p = r.patient;
+        const statusColor = r.missing.length === 0 ? "#e6ffe6" : "#fff0e6";
+        const label = r.isDaily ? "today" : "overall";
+        const missingText = r.missing.length > 0
+          ? `<span style="color:#b30000;">Missing: ${r.missing.join(", ")}</span>`
+          : `<span style="color:#006600;">All complete</span>`;
+
+        return `
+          <a href="patient.html?mrd=${p.mrd}" style="text-decoration:none; color:black;">
+            <div style="border:1px solid #ccc; padding:10px; margin:8px 0; background:${statusColor};">
+              <strong>${p.name}</strong> (MRD: ${p.mrd}) — ${p.ward} — ${p.patient_category}<br>
+              ${r.done}/${r.required} done ${label}<br>
+              ${missingText}
+            </div>
+          </a>
+        `;
+      }).join('');
+    }
+
+    init();
+  </script>
+</body>
+</html>
