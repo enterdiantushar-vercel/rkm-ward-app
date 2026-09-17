@@ -17,8 +17,7 @@
 
   <div id="list-box" style="display:none;">
     <h2>Patients</h2>
-        <button onclick="toggleAddForm()">+ Add New Patient</button>
-    <a href="dashboard.html"><button type="button">Tracking Dashboard</button></a>
+           <button onclick="toggleAddForm()">+ Add New Patient</button>
     <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()"><br><br>
             <div style="margin: 10px 0;">
   <button onclick="toggleFilters()" type="button">Filters ▾</button>
@@ -99,7 +98,15 @@
     const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let allPatients = [];
+            let allPatients = [];
+    let allPhotosToday = [];
+
+    const REQUIRED_SLOTS = {
+      "Medicine": ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart"],
+      "OT": ["Before Procedure", "During Procedure", "After Procedure"],
+      "Dialysis": ["Before Procedure", "During Procedure", "After Procedure"],
+      "Chemo": ["Before Procedure", "During Procedure", "After Procedure"]
+    };
 
     async function checkSession() {
       const { data: sessionData } = await supabaseClient.auth.getSession();
