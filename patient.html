@@ -84,24 +84,46 @@
       `).join('');
     }
 
+       let photoPaths = {};
+
     async function loadTodayStatus() {
       const { data, error } = await supabaseClient
         .from('daily_photos')
         .select('*')
         .eq('mrd', mrd)
-        .eq('photo_date', today);
+        .eq('photo_date', today)
+        .order('uploaded_at', { ascending: true });
 
       if (!error && data) {
         data.forEach(entry => {
+          photoPaths[entry.photo_type] = entry.photo_url;
+
           const statusEl = document.getElementById('status-' + entry.photo_type);
           if (statusEl) {
-            statusEl.innerText = " — Captured by " + entry.uploaded_by;
+            statusEl.innerHTML = ' — Captured by ' + entry.uploaded_by + ' <button onclick="viewPhoto(\'' + entry.photo_type + '\')">View</button>';
           }
           if (entry.photo_type === "Discharge Photo") {
-            document.getElementById('dischargeStatus').innerText = "Captured by " + entry.uploaded_by;
+            document.getElementById('dischargeStatus').innerHTML = 'Captured by ' + entry.uploaded_by + ' <button onclick="viewPhoto(\'Discharge Photo\')">View</button>';
           }
         });
       }
+    }
+
+    async function viewPhoto(slotType) {
+      const path = photoPaths[slotType];
+      if (!path) {
+        alert("File not found.");
+        return;
+      }
+      const { data, error } = await supabaseClient.storage
+        .from('patient-photos')
+        .createSignedUrl(path, 300);
+
+      if (error || !data) {
+        alert("Could not open file: " + (error ? error.message : "unknown error"));
+        return;
+      }
+      window.open(data.signedUrl, '_blank');
     }
 
     function triggerCapture(slotType) {
@@ -171,17 +193,13 @@
         return;
       }
 
-      if (activeSlotType === "Discharge Photo") {
+            if (activeSlotType === "Discharge Photo") {
         await supabaseClient
           .from('Patients')
           .update({ is_discharged: true, discharged_date: today })
           .eq('mrd', mrd);
-        document.getElementById('dischargeStatus').innerText = "Captured by " + currentUserEmail;
-      } else {
-        const slotStatusEl = document.getElementById('status-' + activeSlotType);
-        if (slotStatusEl) slotStatusEl.innerText = " — Captured by " + currentUserEmail;
       }
-
+      await loadTodayStatus();
       statusEl.innerText = "";
       alert(activeSlotType + " saved successfully!");
       e.target.value = "";
