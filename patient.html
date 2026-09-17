@@ -204,15 +204,33 @@
       });
     }
 
-    async function getAddress(lat, lon) {
+        async function getAddress(lat, lon) {
       try {
-        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18`);
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=18&namedetails=1`);
         const data = await res.json();
+        let name = data.name || null;
+
+        if (!name) {
+          try {
+            const overpassQuery = `[out:json];(node(around:150,${lat},${lon})[amenity=hospital];way(around:150,${lat},${lon})[amenity=hospital];);out tags;`;
+            const overpassRes = await fetch("https://overpass-api.de/api/interpreter", {
+              method: "POST",
+              body: overpassQuery
+            });
+            const overpassData = await overpassRes.json();
+            if (overpassData.elements && overpassData.elements.length > 0 && overpassData.elements[0].tags && overpassData.elements[0].tags.name) {
+              name = overpassData.elements[0].tags.name;
+            }
+          } catch (err2) {
+            // Overpass lookup failed, fall through to generic address
+          }
+        }
+
         const addr = data.address || {};
         const city = addr.city || addr.town || addr.village || addr.suburb || addr.county || "";
         const state = addr.state || "";
         const country = addr.country || "";
-        const shortLine = [city, state, country].filter(Boolean).join(", ");
+        const shortLine = name ? name : [city, state, country].filter(Boolean).join(", ");
         return { full: data.display_name || null, short: shortLine || null };
       } catch (err) {
         return null;
