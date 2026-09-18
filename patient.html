@@ -121,8 +121,18 @@
       <p id="dischargeStatus" class="slot-status"></p>
     </div>
 
-    <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
+        <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
     <p id="uploadStatus"></p>
+  </div>
+
+  <div id="pdfModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:white; width:95%; height:90%; max-width:900px; border-radius:8px; overflow:hidden; display:flex; flex-direction:column;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#0d6e6e;">
+        <span style="color:white; font-weight:600;">Document Preview</span>
+        <button onclick="closePdfModal()" style="background:transparent; border:none; color:white; font-size:22px; cursor:pointer; min-height:auto; padding:2px 10px;">&times;</button>
+      </div>
+      <iframe id="pdfFrame" style="flex:1; border:none; width:100%;"></iframe>
+    </div>
   </div>
 
   <script>
@@ -249,13 +259,31 @@
       }
     }
 
-    function viewPhotoByIndex(idx) {
+       function viewPhotoByIndex(idx) {
       const entry = allPhotoEntries[idx];
       if (!entry) {
         alert("File not found.");
         return;
       }
-      openSignedUrl(entry.photo_url, false, entry.photo_type);
+      openInModal(entry.photo_url);
+    }
+
+    async function openInModal(path) {
+      const { data, error } = await supabaseClient.storage
+        .from('patient-photos')
+        .createSignedUrl(path, 300);
+
+      if (error || !data) {
+        alert("Could not open file: " + (error ? error.message : "unknown error"));
+        return;
+      }
+      document.getElementById('pdfFrame').src = data.signedUrl;
+      document.getElementById('pdfModal').style.display = 'flex';
+    }
+
+    function closePdfModal() {
+      document.getElementById('pdfModal').style.display = 'none';
+      document.getElementById('pdfFrame').src = '';
     }
 
     function downloadPhotoByIndex(idx) {
@@ -264,17 +292,16 @@
         alert("File not found.");
         return;
       }
-      openSignedUrl(entry.photo_url, true, entry.photo_type);
+      downloadSignedUrl(entry.photo_url, entry.photo_type);
     }
 
-    async function openSignedUrl(path, forceDownload, photoType) {
-      const options = forceDownload ? { download: photoType.replace(/\s+/g, '_') + '.pdf' } : {};
+    async function downloadSignedUrl(path, photoType) {
       const { data, error } = await supabaseClient.storage
         .from('patient-photos')
-        .createSignedUrl(path, 300, options);
+        .createSignedUrl(path, 300, { download: photoType.replace(/\s+/g, '_') + '.pdf' });
 
       if (error || !data) {
-        alert("Could not open file: " + (error ? error.message : "unknown error"));
+        alert("Could not download file: " + (error ? error.message : "unknown error"));
         return;
       }
       window.open(data.signedUrl, '_blank');
