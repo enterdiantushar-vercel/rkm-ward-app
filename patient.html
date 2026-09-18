@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -90,6 +91,30 @@
     }
     #uploadStatus { color: #0d6e6e; font-weight: 600; margin-top: 10px; }
 
+    /* --- PDF viewer modal --- */
+    #pdfCanvasContainer {
+      flex: 1;
+      overflow: auto;
+      background: #525659;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 10px;
+    }
+    #pdfCanvas {
+      max-width: 100%;
+      height: auto;
+      background: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    #pdfLoadingMsg {
+      color: white;
+      font-size: 14px;
+      padding: 20px;
+      text-align: center;
+      width: 100%;
+    }
+
     @media (min-width: 600px) {
       .container { padding: 24px; }
       #slotsContainer { grid-template-columns: repeat(2, 1fr); }
@@ -127,11 +152,14 @@
 
   <div id="pdfModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; align-items:center; justify-content:center;">
     <div style="background:white; width:95%; height:90%; max-width:900px; border-radius:8px; overflow:hidden; display:flex; flex-direction:column;">
-      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#0d6e6e;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#0d6e6e; flex-shrink:0;">
         <span style="color:white; font-weight:600;">Document Preview</span>
         <button onclick="closePdfModal()" style="background:transparent; border:none; color:white; font-size:22px; cursor:pointer; min-height:auto; padding:2px 10px;">&times;</button>
       </div>
-      <iframe id="pdfFrame" style="flex:1; border:none; width:100%; background:#525659;"></iframe>
+      <div id="pdfCanvasContainer">
+        <p id="pdfLoadingMsg">Loading document...</p>
+        <canvas id="pdfCanvas" style="display:none;"></canvas>
+      </div>
     </div>
   </div>
 
@@ -139,6 +167,8 @@
     const SUPABASE_URL = "https://drsvjggsrpibkczldahl.supabase.co";
     const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.worker.min.js';
 
     const params = new URLSearchParams(window.location.search);
     const mrd = params.get('mrd');
@@ -271,6 +301,8 @@
       openInModal(entry.photo_url);
     }
 
+    let currentRenderTask = null;
+
     async function openInModal(path) {
       const { data, error } = await supabaseClient.storage
         .from('patient-photos')
@@ -280,15 +312,56 @@
         alert("Could not open file: " + (error ? error.message : "unknown error"));
         return;
       }
-      // Append PDF viewer parameters so the page opens already fit to the
-      // frame instead of at 100% actual-size zoom (which forced scrolling).
-      document.getElementById('pdfFrame').src = data.signedUrl + '#view=FitH&toolbar=1&navpanes=0';
+
+      const canvas = document.getElementById('pdfCanvas');
+      const loadingMsg = document.getElementById('pdfLoadingMsg');
+      canvas.style.display = 'none';
+      loadingMsg.style.display = 'block';
+      loadingMsg.innerText = 'Loading document...';
       document.getElementById('pdfModal').style.display = 'flex';
+
+      try {
+        const loadingTask = pdfjsLib.getDocument(data.signedUrl);
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1);
+
+        // Render at a resolution matched to the container width (times device
+        // pixel ratio for sharpness on retina/high-DPI phone screens), so the
+        // whole page fits the modal without needing to zoom or scroll.
+        const container = document.getElementById('pdfCanvasContainer');
+        const containerWidth = container.clientWidth - 20; // minus padding
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = containerWidth / baseViewport.width;
+        const dpr = window.devicePixelRatio || 1;
+        const viewport = page.getViewport({ scale: scale * dpr });
+
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width = (viewport.width / dpr) + 'px';
+        canvas.style.height = (viewport.height / dpr) + 'px';
+
+        const ctx = canvas.getContext('2d');
+
+        if (currentRenderTask) {
+          currentRenderTask.cancel();
+        }
+        currentRenderTask = page.render({ canvasContext: ctx, viewport: viewport });
+        await currentRenderTask.promise;
+        currentRenderTask = null;
+
+        loadingMsg.style.display = 'none';
+        canvas.style.display = 'block';
+      } catch (err) {
+        loadingMsg.innerText = 'Could not display document: ' + err.message;
+      }
     }
 
     function closePdfModal() {
+      if (currentRenderTask) {
+        currentRenderTask.cancel();
+        currentRenderTask = null;
+      }
       document.getElementById('pdfModal').style.display = 'none';
-      document.getElementById('pdfFrame').src = '';
     }
 
     function downloadPhotoByIndex(idx) {
@@ -513,12 +586,8 @@
 
       const dataUrl = canvas.toDataURL('image/jpeg', quality);
 
-      // IMPORTANT FIX: build the PDF page at the exact pixel size of the
-      // photo itself, instead of a fixed A4 sheet. A4 didn't match most
-      // phone-photo aspect ratios, so viewers rendered it at odd zoom
-      // levels and required scrolling in every direction. Matching the
-      // page size to the image means the whole photo fills exactly one
-      // page, so "fit to page" (our default view) shows all of it at once.
+      // PDF page is sized to exactly match the photo's own pixel dimensions
+      // (instead of a fixed A4 sheet), so the whole photo fills one page.
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({ unit: 'px', format: [width, height] });
       pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
@@ -530,7 +599,6 @@
       const { canvas, width, height } = await loadImageToCanvas(file, maxWidth);
       const dataUrl = canvas.toDataURL('image/jpeg', quality);
 
-      // Same fix as above: page size matches the image exactly.
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({ unit: 'px', format: [width, height] });
       pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
