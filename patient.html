@@ -94,10 +94,10 @@
     /* --- PDF viewer modal --- */
     #pdfCanvasContainer {
       flex: 1;
-      overflow: auto;
+      overflow: hidden;
       background: #525659;
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: center;
       padding: 10px;
     }
@@ -325,13 +325,18 @@
         const pdf = await loadingTask.promise;
         const page = await pdf.getPage(1);
 
-        // Render at a resolution matched to the container width (times device
-        // pixel ratio for sharpness on retina/high-DPI phone screens), so the
-        // whole page fits the modal without needing to zoom or scroll.
+        // Render at a resolution matched to whichever dimension (width or
+        // height) is more constraining, times device pixel ratio for
+        // sharpness on retina/high-DPI phone screens — so the whole page
+        // fits the modal on both axes without needing to zoom or scroll.
         const container = document.getElementById('pdfCanvasContainer');
         const containerWidth = container.clientWidth - 20; // minus padding
+        const containerHeight = container.clientHeight - 20; // minus padding
         const baseViewport = page.getViewport({ scale: 1 });
-        const scale = containerWidth / baseViewport.width;
+        const scale = Math.min(
+          containerWidth / baseViewport.width,
+          containerHeight / baseViewport.height
+        );
         const dpr = window.devicePixelRatio || 1;
         const viewport = page.getViewport({ scale: scale * dpr });
 
