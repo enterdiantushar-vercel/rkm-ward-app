@@ -131,7 +131,7 @@
         <span style="color:white; font-weight:600;">Document Preview</span>
         <button onclick="closePdfModal()" style="background:transparent; border:none; color:white; font-size:22px; cursor:pointer; min-height:auto; padding:2px 10px;">&times;</button>
       </div>
-      <iframe id="pdfFrame" style="flex:1; border:none; width:100%;"></iframe>
+      <iframe id="pdfFrame" style="flex:1; border:none; width:100%; background:#525659;"></iframe>
     </div>
   </div>
 
@@ -280,7 +280,9 @@
         alert("Could not open file: " + (error ? error.message : "unknown error"));
         return;
       }
-      document.getElementById('pdfFrame').src = data.signedUrl;
+      // Append PDF viewer parameters so the page opens already fit to the
+      // frame instead of at 100% actual-size zoom (which forced scrolling).
+      document.getElementById('pdfFrame').src = data.signedUrl + '#view=FitH&toolbar=1&navpanes=0';
       document.getElementById('pdfModal').style.display = 'flex';
     }
 
@@ -511,11 +513,15 @@
 
       const dataUrl = canvas.toDataURL('image/jpeg', quality);
 
+      // IMPORTANT FIX: build the PDF page at the exact pixel size of the
+      // photo itself, instead of a fixed A4 sheet. A4 didn't match most
+      // phone-photo aspect ratios, so viewers rendered it at odd zoom
+      // levels and required scrolling in every direction. Matching the
+      // page size to the image means the whole photo fills exactly one
+      // page, so "fit to page" (our default view) shows all of it at once.
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF();
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = (height * pageWidth) / width;
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
+      const pdf = new jsPDF({ unit: 'px', format: [width, height] });
+      pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
 
       return pdf.output('blob');
     }
@@ -524,11 +530,10 @@
       const { canvas, width, height } = await loadImageToCanvas(file, maxWidth);
       const dataUrl = canvas.toDataURL('image/jpeg', quality);
 
+      // Same fix as above: page size matches the image exactly.
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF();
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = (height * pageWidth) / width;
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, pageWidth, pageHeight);
+      const pdf = new jsPDF({ unit: 'px', format: [width, height] });
+      pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
 
       return pdf.output('blob');
     }
