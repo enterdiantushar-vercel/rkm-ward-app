@@ -200,7 +200,7 @@
       }
 
       renderSlots();
-      loadTodayStatus();
+      loadAllPhotos();
     }
 
     function renderSlots() {
@@ -221,12 +221,13 @@
       `).join('');
     }
 
-    async function loadTodayStatus() {
+    // Fetches EVERY photo ever captured for this patient (all dates), not just today's.
+    // This is what makes photos from earlier days of the stay stay visible.
+    async function loadAllPhotos() {
       const { data, error } = await supabaseClient
         .from('daily_photos')
         .select('*')
         .eq('mrd', mrd)
-        .eq('photo_date', today)
         .order('uploaded_at', { ascending: true });
 
       if (!error && data) {
@@ -241,9 +242,11 @@
           const indexes = grouped[type];
           const lastEntry = data[indexes[indexes.length - 1]];
           const links = indexes.map(idx => {
-            const time = new Date(data[idx].uploaded_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-            return '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View ' + time + '</button>' +
-                   '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download ' + time + '</button>';
+            const dt = new Date(data[idx].uploaded_at);
+            const label = dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+                          ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            return '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View ' + label + '</button>' +
+                   '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download ' + label + '</button>';
           }).join(' ');
 
           if (type === "Discharge Photo") {
@@ -252,7 +255,7 @@
           } else {
             const statusEl = document.getElementById('status-' + type);
             if (statusEl) {
-              statusEl.innerHTML = indexes.length + ' capture(s), last by ' + lastEntry.uploaded_by + '<br>' + links;
+              statusEl.innerHTML = indexes.length + ' capture(s) over the stay, last by ' + lastEntry.uploaded_by + '<br>' + links;
             }
           }
         });
@@ -380,7 +383,7 @@
           .update({ is_discharged: true, discharged_date: today })
           .eq('mrd', mrd);
       }
-      await loadTodayStatus();
+      await loadAllPhotos();
 
       statusEl.innerText = "";
       alert(activeSlotType + " saved successfully!");
