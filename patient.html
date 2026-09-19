@@ -227,7 +227,22 @@
     const today = new Date().toISOString().split('T')[0];
 
     const GEOTAG_SLOTS = ["Patient Photo", "Before Procedure", "During Procedure", "After Procedure", "Discharge Photo"];
+    function parseUTC(dateStr) {
+      if (!dateStr) return new Date();
+      if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
+        dateStr = dateStr + 'Z';
+      }
+      return new Date(dateStr);
+    }
 
+    function startInactivityTimer() {
+      clearTimeout(inactivityTimer);
+      inactivityTimer = setTimeout(async () => {
+        await supabaseClient.auth.signOut();
+        alert("You were logged out due to 30 minutes of inactivity.");
+        window.location.href = "index.html";
+      }, 30 * 60 * 1000);
+    }
     function startInactivityTimer() {
       clearTimeout(inactivityTimer);
       inactivityTimer = setTimeout(async () => {
@@ -318,8 +333,8 @@
         Object.keys(grouped).forEach(type => {
           const indexes = grouped[type];
           const lastEntry = data[indexes[indexes.length - 1]];
-          const links = indexes.map(idx => {
-            const dt = new Date(data[idx].uploaded_at);
+                    const links = indexes.map(idx => {
+            const dt = parseUTC(data[idx].uploaded_at);
             const label = dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
                           ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             return '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View ' + label + '</button>' +
