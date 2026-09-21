@@ -173,9 +173,12 @@
       document.getElementById('summary').innerText =
         `${overdueCount} of ${results.length} patients need enhancement now.`;
 
-      document.getElementById('list').innerHTML = results.map(r => {
+            document.getElementById('list').innerHTML = results.map(r => {
         const p = r.patient;
         const badgeText = r.status === "ok" ? "Up to date" : (r.status === "never" ? "Never enhanced" : "Overdue");
+        const buttonHtml = r.status === "ok"
+          ? `<button disabled style="background:#B0BEC5; cursor:not-allowed;">Not due yet</button>`
+          : `<button onclick="markEnhanced('${p.mrd}')">Mark Enhanced</button>`;
         return `
           <div class="patient-card ${r.status}">
             <div class="patient-name">${p.name} (MRD: ${p.mrd})</div>
@@ -183,7 +186,7 @@
             <div class="status-badge">${badgeText}</div>
             <div class="patient-meta">${r.lastText}</div>
             <div class="patient-meta">${r.nextDueText}</div>
-            <button onclick="markEnhanced('${p.mrd}')">Mark Enhanced</button>
+            ${buttonHtml}
           </div>
         `;
       }).join('');
