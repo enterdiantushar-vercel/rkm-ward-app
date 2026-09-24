@@ -229,6 +229,24 @@
   </div>
 
   <div class="container">
+    <div class="discharge-section" style="border-left-color: var(--teal-active); margin-top:0; margin-bottom:16px;">
+      <div id="losBanner"></div>
+      <div class="slot-title">Ward / Bed / LOS</div>
+      <select id="editWard" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+        <option value="">Not assigned yet</option>
+        <option>A1</option><option>A2</option><option>A3</option>
+        <option>B1</option><option>B2</option><option>B3</option>
+        <option>C2</option><option>C3</option><option>C5</option>
+        <option>PWM</option><option>PWS</option><option>GE</option>
+        <option>CW</option><option>EXT CW</option><option>CCU</option>
+        <option>ICU</option><option>HDUII</option>
+      </select>
+      <input type="text" id="editBed" placeholder="Bed No." style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+      <div id="editLosWrap"><input type="number" id="editLos" min="1" placeholder="LOS days" style="width:100%; padding:10px; margin:6px 0; font-size:16px;"></div>
+      <button onclick="saveLocation()">Save changes</button>
+      <p id="editStatus" class="slot-status"></p>
+      <div id="wardHistory" class="slot-status"></div>
+    </div>
     <div id="slotsContainer"></div>
 
     <div class="discharge-section">
@@ -269,7 +287,7 @@
     let patientCategory = "";
     let allPhotoEntries = [];
     let inactivityTimer;
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
     const GEOTAG_SLOTS = ["Patient Photo", "Before Procedure", "During Procedure", "After Procedure", "Discharge Photo"];
     function parseUTC(dateStr) {
@@ -324,6 +342,8 @@
       document.getElementById('patientInfo').innerText =
         `MRD: ${patient.mrd} | Ward: ${patient.ward} | Bed: ${patient.bed_no} | Category: ${patient.patient_category}`;
       patientCategory = patient.patient_category;
+      currentPatient = patient;
+      fillEditFields();
 
       if (patient.is_discharged) {
         document.getElementById('dischargeStatus').innerText = "Patient already discharged on " + patient.discharged_date;
@@ -730,6 +750,89 @@
       pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
 
       return pdf.output('blob');
+    }
+
+    let currentPatient = null;
+
+    function esc(s) {
+      return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function fillEditFields() {
+      const p = currentPatient;
+      document.getElementById('editWard').value = p.ward || "";
+      document.getElementById('editBed').value = p.bed_no || "";
+      if (p.patient_category === "Medicine") {
+        document.getElementById('editLosWrap').style.display = "none";
+      } else {
+        document.getElementById('editLos').value = p.los_days || "";
+      }
+      showLosBanner();
+      loadWardHistory();
+    }
+
+    function showLosBanner() {
+      const p = currentPatient;
+      const box = document.getElementById('losBanner');
+      box.innerHTML = "";
+      if (p.is_discharged || !p.los_days || p.patient_category === "Medicine" || !p.admission_date) return;
+      const dayNo = Math.round((new Date(today) - new Date(p.admission_date)) / 86400000) + 1;
+      const left = p.los_days - dayNo;
+      if (left < 0) {
+        box.innerHTML = '<div style="background:#FDECEA; color:#E53935; padding:10px; border-radius:8px; font-weight:600; margin-bottom:10px;">&#9888; LOS EXCEEDED by ' + (-left) + ' day(s). Discharge and readmit on paper.</div>';
+      } else if (left === 0) {
+        box.innerHTML = '<div style="background:#FFF8E1; color:#B8860B; padding:10px; border-radius:8px; font-weight:600; margin-bottom:10px;">&#9888; LOS ends today (Day ' + dayNo + ' of ' + p.los_days + ')</div>';
+      } else {
+        box.innerHTML = '<div style="color:#607D8B; margin-bottom:10px;">LOS: Day ' + dayNo + ' of ' + p.los_days + '</div>';
+      }
+    }
+
+    async function saveLocation() {
+      const p = currentPatient;
+      const newWard = document.getElementById('editWard').value;
+      const newBed = document.getElementById('editBed').value.trim();
+      const losRaw = document.getElementById('editLos').value;
+      const newLos = (p.patient_category !== "Medicine" && losRaw) ? parseInt(losRaw) : null;
+      const status = document.getElementById('editStatus');
+
+      const update = { ward: newWard, bed_no: newBed };
+      if (p.patient_category !== "Medicine") update.los_days = newLos;
+
+      const { error } = await supabaseClient.from('Patients').update(update).eq('mrd', mrd);
+      if (error) { status.innerText = "Error: " + error.message; return; }
+
+      const moved = (p.ward || "") !== newWard || (p.bed_no || "") !== newBed;
+      if (moved) {
+        const { error: hErr } = await supabaseClient.from('ward_history').insert([{
+          mrd: mrd,
+          old_ward: p.ward || "", old_bed: p.bed_no || "",
+          new_ward: newWard, new_bed: newBed,
+          changed_by: currentUserEmail
+        }]);
+        if (hErr) { status.innerText = "Saved, but history failed: " + hErr.message; return; }
+      }
+
+      p.ward = newWard; p.bed_no = newBed;
+      if (p.patient_category !== "Medicine") p.los_days = newLos;
+      document.getElementById('patientInfo').innerText =
+        `MRD: ${p.mrd} | Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | Category: ${p.patient_category}`;
+      status.innerText = "Saved.";
+      showLosBanner();
+      loadWardHistory();
+    }
+
+    async function loadWardHistory() {
+      const { data, error } = await supabaseClient
+        .from('ward_history').select('*').eq('mrd', mrd)
+        .order('changed_at', { ascending: false });
+      const box = document.getElementById('wardHistory');
+      if (error || !data || data.length === 0) { box.innerHTML = ""; return; }
+      box.innerHTML = '<strong>Change history</strong><br>' + data.map(h =>
+        esc(new Date(h.changed_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })) + ': ' +
+        esc(h.old_ward || "-") + ' / ' + esc(h.old_bed || "-") + ' &rarr; ' +
+        esc(h.new_ward || "-") + ' / ' + esc(h.new_bed || "-") +
+        ' (' + esc(h.changed_by) + ')'
+      ).join('<br>');
     }
 
     // --- ADDED MANUAL DISCHARGE FUNCTION HERE INSIDE THE SCRIPT ---
