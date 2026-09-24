@@ -231,7 +231,8 @@
   <div class="container">
     <div class="discharge-section" style="border-left-color: var(--teal-active); margin-top:0; margin-bottom:16px;">
       <div id="losBanner"></div>
-      <div class="slot-title">Ward / Bed / LOS</div>
+      <button type="button" class="btn-toggle" onclick="toggleEditBox()" style="background:#fff; color:#26A69A; border:1.5px solid #B9E4E0; margin:0;">Edit Ward / Bed / LOS &#9662;</button>
+      <div id="editBox" style="display:none;">
       <select id="editWard" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
         <option value="">Not assigned yet</option>
         <option>A1</option><option>A2</option><option>A3</option>
@@ -246,6 +247,7 @@
       <button onclick="saveLocation()">Save changes</button>
       <p id="editStatus" class="slot-status"></p>
       <div id="wardHistory" class="slot-status"></div>
+      </div>
     </div>
     <div id="slotsContainer"></div>
 
@@ -753,6 +755,11 @@
     }
 
     let currentPatient = null;
+
+    function toggleEditBox() {
+      const box = document.getElementById('editBox');
+      box.style.display = box.style.display === "none" ? "block" : "none";
+    }
 
     function esc(s) {
       return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
