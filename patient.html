@@ -190,10 +190,11 @@
     <div id="slotsContainer"></div>
 
     <div class="discharge-section">
-      <div class="slot-title">Discharge</div>
-      <button onclick="triggerCapture('Discharge Photo')">Capture Discharge Photo</button>
-      <p id="dischargeStatus" class="slot-status"></p>
-    </div>
+   <div class="slot-title">Discharge Management</div>
+   <button onclick="triggerCapture('Discharge Photo')">Capture Discharge Photo (Optional)</button>
+   <button onclick="markPatientDischarged()" style="background: var(--danger); margin-left: 8px;">Mark as Discharged</button>
+   <p id="dischargeStatus" class="slot-status"></p>
+ </div>
 
         <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
     <p id="uploadStatus"></p>
@@ -514,12 +515,7 @@
         return;
       }
 
-      if (activeSlotType === "Discharge Photo") {
-        await supabaseClient
-          .from('Patients')
-          .update({ is_discharged: true, discharged_date: today })
-          .eq('mrd', mrd);
-      }
+     
       await loadAllPhotos();
 
       statusEl.innerText = "";
@@ -668,7 +664,26 @@
       return pdf.output('blob');
     }
 
-       init();
+    // --- ADDED MANUAL DISCHARGE FUNCTION HERE INSIDE THE SCRIPT ---
+    async function markPatientDischarged() {
+      if (!confirm("Are you sure you want to mark this patient as discharged?")) return;
+
+      const { error } = await supabaseClient
+        .from('Patients')
+        .update({ is_discharged: true, discharged_date: today })
+        .eq('mrd', mrd);
+
+      if (error) {
+        alert("Failed to discharge: " + error.message);
+        return;
+      }
+
+      document.getElementById('dischargeStatus').innerText = "Patient successfully discharged on " + today;
+      alert("Patient marked as discharged!");
+      window.location.href = "index.html";
+    }
+
+    init();
   </script>
   <script>
     if ('serviceWorker' in navigator) {
