@@ -299,6 +299,7 @@
         <option value="Dialysis">Dialysis</option>
         <option value="Chemo">Chemo</option>
       </select>
+      <input type="number" id="newLos" min="1" placeholder="LOS days (OT / Chemo / Dialysis only)">
       <button onclick="addPatient()">Save Patient</button>
       <p id="addMessage"></p>
     </div>
@@ -393,6 +394,8 @@
       const bed_no = document.getElementById('newBed').value;
       const admission_date = document.getElementById('newAdmissionDate').value;
       const patient_category = document.getElementById('newCategory').value;
+      const los_raw = document.getElementById('newLos').value;
+      const los_days = (patient_category !== "Medicine" && los_raw) ? parseInt(los_raw) : null;
       const addMessage = document.getElementById('addMessage');
 
       if (!mrd || !name) {
@@ -402,7 +405,7 @@
 
       const { error } = await supabaseClient
         .from('Patients')
-        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, is_discharged: false }]);
+        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, los_days, is_discharged: false }]);
 
       if (error) {
         addMessage.innerText = "Error: " + error.message;
@@ -423,7 +426,7 @@
         .select('*')
         .order('name', { ascending: true });
 
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const { data: photoData, error: photoError } = await supabaseClient
         .from('daily_photos')
         .select('*');
@@ -445,7 +448,7 @@
       if (p.is_discharged) return null;
       const required = REQUIRED_SLOTS[p.patient_category] || [];
       const isDaily = p.patient_category === "Medicine";
-      const today = new Date().toISOString().split('T')[0];
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
       const patientPhotos = allPhotosToday.filter(ph => ph.mrd === p.mrd);
       const relevantPhotos = isDaily
@@ -456,6 +459,16 @@
       const missing = required.filter(slot => !capturedTypes.has(slot));
 
       return { done: required.length - missing.length, total: required.length, missing: missing, isDaily: isDaily };
+    }
+
+    function losHtml(p) {
+      if (p.is_discharged || !p.los_days || p.patient_category === "Medicine" || !p.admission_date) return "";
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const dayNo = Math.round((new Date(today) - new Date(p.admission_date)) / 86400000) + 1;
+      const left = p.los_days - dayNo;
+      if (left < 0) return `<div class="status-line" style="color:#E53935;">&#9888; LOS EXCEEDED by ${-left} day(s). Discharge and readmit on paper.</div>`;
+      if (left === 0) return `<div class="status-line" style="color:#B8860B;">&#9888; LOS ends today (Day ${dayNo} of ${p.los_days})</div>`;
+      return `<div class="status-line" style="color:#607D8B;">LOS: Day ${dayNo} of ${p.los_days}</div>`;
     }
 
     function renderList(patients) {
@@ -482,8 +495,8 @@
         return `
           <a href="patient.html?mrd=${p.mrd}" class="patient-card ${cardClass}">
             <div class="patient-name">${p.name} <span style="font-weight:400; color:#777;">(MRD: ${p.mrd})</span></div>
-            <div class="patient-meta">Ward: ${p.ward} | Bed: ${p.bed_no} | ${p.patient_category || "-"} | ${p.is_discharged ? "Discharged" : "Active"}</div>
-            ${trackingHtml}
+            <div class="patient-meta">Ward: Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | ${p.patient_category || "-"} | ${p.is_discharged ? "Discharged" : "Active"}</div>
+            ${trackingHtml}${losHtml(p)}
           </a>
         `;
       }).join('');
