@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4DB6AC">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="mobile-web-app-capable" content="yes">
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
@@ -574,68 +579,6 @@
       }
     });
 
-      let lat = null, lon = null, geoStoreText = "";
-      let pdfBlob;
-
-      if (needsGeotag) {
-        statusEl.innerText = "Getting location...";
-        const loc = await getLocation();
-        lat = loc.lat;
-        lon = loc.lon;
-        geoStoreText = loc.text;
-
-        let address = null;
-
-        if (lat !== null && lon !== null) {
-          statusEl.innerText = "Fetching address...";
-          address = await getAddress(lat, lon);
-        }
-
-        statusEl.innerText = "Preparing document...";
-        pdfBlob = await buildGeotaggedPdf(file, lat, lon, address, 1280, 0.7);
-      } else {
-        statusEl.innerText = "Preparing document...";
-        pdfBlob = await buildDocumentPdf(file, 1280, 0.75);
-      }
-
-      statusEl.innerText = "Uploading, please wait...";
-
-      const filePath = `${mrd}/${today}/${activeSlotType}-${Date.now()}.pdf`;
-      const { data: uploadData, error: uploadError } = await supabaseClient.storage
-        .from('patient-photos')
-        .upload(filePath, pdfBlob);
-
-      if (uploadError) {
-        statusEl.innerText = "";
-        alert("Upload failed: " + uploadError.message);
-        return;
-      }
-
-      const { error: insertError } = await supabaseClient
-        .from('daily_photos')
-        .insert([{
-          mrd: mrd,
-          photo_date: today,
-          photo_type: activeSlotType,
-          photo_url: filePath,
-          file_type: "pdf",
-          geo_location: geoStoreText,
-          uploaded_by: currentUserEmail
-        }]);
-
-      if (insertError) {
-        statusEl.innerText = "";
-        alert("Save failed: " + insertError.message);
-        return;
-      }
-
-     
-      await loadAllPhotos();
-
-      statusEl.innerText = "";
-      alert(activeSlotType + " saved successfully!");
-      e.target.value = "";
-    });
 
     function getLocation() {
       return new Promise((resolve) => {
@@ -802,7 +745,7 @@
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js');
+        navigator.serviceWorker.register('./sw.js');
       });
     }
   </script>
