@@ -654,61 +654,72 @@
     }
 
     async function buildGeotaggedPdf(file, lat, lon, address, maxWidth, quality) {
-      const { canvas, ctx, width, height } = await loadImageToCanvas(file, maxWidth);
+  const { canvas, ctx, width, height } = await loadImageToCanvas(file, maxWidth);
 
-      const now = new Date();
-      const headingText = (address && address.short) ? address.short : (lat !== null ? "Location captured" : "Location unavailable");
-      const bodyLines = [];
-      if (address && address.full) {
-        bodyLines.push(address.full);
+  const HOSPITAL_NAME = "Ramakrishna Mission Seva Pratishthan";
+  const now = new Date();
+
+  const bodyLines = [];
+  if (address && address.full) bodyLines.push(address.full);
+  if (lat !== null && lon !== null) {
+    bodyLines.push(`Lat ${lat.toFixed(6)}, Long ${lon.toFixed(6)}`);
+  } else {
+    bodyLines.push("Location unavailable");
+  }
+  bodyLines.push(now.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + " IST");
+
+  const padding = Math.round(width * 0.015);
+  const maxTextWidth = width - padding * 2;
+
+  let headingSize = Math.round(width * 0.045);
+  ctx.font = `bold ${headingSize}px Arial`;
+  while (ctx.measureText(HOSPITAL_NAME).width > maxTextWidth && headingSize > 12) {
+    headingSize -= 1;
+    ctx.font = `bold ${headingSize}px Arial`;
+  }
+
+  const bodySize = Math.round(width * 0.028);
+  const lineGap = Math.round(bodySize * 0.3);
+
+  ctx.font = `${bodySize}px Arial`;
+  const wrapped = [];
+  bodyLines.forEach(line => {
+    const words = line.split(' ');
+    let current = '';
+    words.forEach(word => {
+      const test = current ? current + ' ' + word : word;
+      if (ctx.measureText(test).width > maxTextWidth && current) {
+        wrapped.push(current);
+        current = word;
+      } else {
+        current = test;
       }
-      if (lat !== null && lon !== null) {
-        bodyLines.push(`Lat ${lat.toFixed(6)}, Long ${lon.toFixed(6)}`);
-      }
-      bodyLines.push(now.toLocaleString());
+    });
+    if (current) wrapped.push(current);
+  });
 
-      const headingSize = Math.max(16, Math.round(width * 0.028));
-      const bodySize = Math.max(12, Math.round(width * 0.018));
-      const lineGap = 4;
-      const padding = 8;
+  const boxHeight = padding * 2 + headingSize + lineGap + wrapped.length * (bodySize + lineGap);
 
-      ctx.font = `bold ${headingSize}px Arial`;
-      let maxLineWidth = ctx.measureText(headingText).width;
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(0, height - boxHeight, width, boxHeight);
 
-      ctx.font = `${bodySize}px Arial`;
-      bodyLines.forEach(line => {
-        const w = ctx.measureText(line).width;
-        if (w > maxLineWidth) maxLineWidth = w;
-      });
+  let cursorY = height - boxHeight + padding + headingSize;
+  ctx.fillStyle = "white";
+  ctx.font = `bold ${headingSize}px Arial`;
+  ctx.fillText(HOSPITAL_NAME, padding, cursorY);
 
-      const headingHeight = headingSize + lineGap;
-      const bodyHeight = bodyLines.length * (bodySize + lineGap);
-      const boxHeight = headingHeight + bodyHeight + padding * 2;
+  ctx.font = `${bodySize}px Arial`;
+  wrapped.forEach(line => {
+    cursorY += bodySize + lineGap;
+    ctx.fillText(line, padding, cursorY);
+  });
 
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(0, height - boxHeight, maxLineWidth + padding * 2, boxHeight);
-
-      let cursorY = height - boxHeight + padding + headingSize;
-      ctx.fillStyle = "white";
-      ctx.font = `bold ${headingSize}px Arial`;
-      ctx.fillText(headingText, padding, cursorY);
-
-      ctx.font = `${bodySize}px Arial`;
-      bodyLines.forEach(line => {
-        cursorY += bodySize + lineGap;
-        ctx.fillText(line, padding, cursorY);
-      });
-
-      const dataUrl = canvas.toDataURL('image/jpeg', quality);
-
-      // PDF page is sized to exactly match the photo's own pixel dimensions
-      // (instead of a fixed A4 sheet), so the whole photo fills one page.
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ unit: 'px', format: [width, height] });
-      pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
-
-      return pdf.output('blob');
-    }
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'px', format: [width, height] });
+  pdf.addImage(dataUrl, 'JPEG', 0, 0, width, height);
+  return pdf.output('blob');
+}
 
     async function buildDocumentPdf(file, maxWidth, quality) {
       const { canvas, width, height } = await loadImageToCanvas(file, maxWidth);
