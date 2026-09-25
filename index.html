@@ -270,6 +270,7 @@
     <div id="addForm" style="display:none;">
       <h3>New Patient</h3>
       <input type="text" id="newMrd" placeholder="MRD / Registration ID">
+      <input type="text" id="newPmjayId" placeholder="PMJAY Registration ID">
       <input type="text" id="newName" placeholder="Patient Name">
       <select id="newWard">
         <option value="">Select Ward</option>
@@ -389,6 +390,7 @@
 
     async function addPatient() {
       const mrd = document.getElementById('newMrd').value;
+      const pmjay_id = document.getElementById('newPmjayId').value.trim();
       const name = document.getElementById('newName').value;
       const ward = document.getElementById('newWard').value;
       const bed_no = document.getElementById('newBed').value;
@@ -398,20 +400,21 @@
       const los_days = (patient_category !== "Medicine" && los_raw) ? parseInt(los_raw) : null;
       const addMessage = document.getElementById('addMessage');
 
-      if (!mrd || !name) {
-        addMessage.innerText = "MRD and Name are required.";
+      if (!mrd || !name || !pmjay_id) {
+        addMessage.innerText = "MRD, PMJAY ID and Name are required.";
         return;
       }
 
       const { error } = await supabaseClient
         .from('Patients')
-        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, los_days, los_start_date: los_days ? admission_date : null, is_discharged: false }]);
+        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, pmjay_id, los_days, los_start_date: los_days ? admission_date : null, is_discharged: false }]);
 
       if (error) {
         addMessage.innerText = "Error: " + error.message;
       } else {
         addMessage.innerText = "Patient added!";
         document.getElementById('newMrd').value = "";
+        document.getElementById('newPmjayId').value = "";
         document.getElementById('newName').value = "";
         document.getElementById('newWard').value = "";
         document.getElementById('newBed').value = "";
@@ -496,7 +499,7 @@
 
         return `
           <a href="patient.html?mrd=${p.mrd}" class="patient-card ${cardClass}">
-            <div class="patient-name">${p.name} <span style="font-weight:400; color:#777;">(MRD: ${p.mrd})</span></div>
+            <div class="patient-name">${p.name} <span style="font-weight:400; color:#777;">(MRD: ${p.mrd} | PMJAY: ${p.pmjay_id || "-"})</span></div>
             <div class="patient-meta">Ward: Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | ${p.patient_category || "-"} | ${p.is_discharged ? "Discharged" : "Active"}</div>
             ${trackingHtml}${losHtml(p)}
           </a>
