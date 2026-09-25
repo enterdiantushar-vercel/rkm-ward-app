@@ -157,9 +157,9 @@
         <div class="ward-section">
           <div class="ward-title">Ward: ${ward} (${grouped[ward].length} patients)</div>
           <table>
-            <tr><th>Name</th><th>MRD</th><th>Bed</th><th>Category</th><th>LOS</th></tr>
+            <tr><th>Name</th><th>MRD</th><th>PMJAY ID</th><th>Bed</th><th>Category</th><th>LOS</th></tr>
             ${grouped[ward].map(p => `
-             <tr><td>${p.name}</td><td>${p.mrd}</td><td>${p.bed_no || "-"}</td><td>${p.patient_category || "-"}</td><td>${losText(p)}</td></tr>
+            <tr><td>${p.name}</td><td>${p.mrd}</td><td>${p.pmjay_id || "-"}</td><td>${p.bed_no || "-"}</td><td>${p.patient_category || "-"}</td><td>${losText(p)}</td></tr>
             `).join('')}
           </table>
         </div>
