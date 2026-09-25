@@ -109,7 +109,8 @@
     function losText(p) {
       if (!p.los_days || p.patient_category === "Medicine" || !p.admission_date) return "-";
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      const dayNo = Math.round((new Date(today) - new Date(p.admission_date)) / 86400000) + 1;
+      const losStart = p.los_start_date || p.admission_date;
+      const dayNo = Math.round((new Date(today) - new Date(losStart)) / 86400000) + 1;
       const left = p.los_days - dayNo;
       if (left < 0) return '<span style="color:#E53935; font-weight:700;">Exceeded +' + (-left) + '</span>';
       if (left === 0) return '<span style="color:#B8860B; font-weight:700;">Ends today</span>';
