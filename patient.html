@@ -249,6 +249,22 @@
       <div id="wardHistory" class="slot-status"></div>
       </div>
     </div>
+    <div class="discharge-section" style="border-left-color: var(--sky-blue); margin-top:0; margin-bottom:16px;">
+      <div class="slot-title">Category: <span id="currentCategoryLabel"></span></div>
+      <button type="button" onclick="toggleConvertBox()" style="background:#fff; color:#2196F3; border:1.5px solid #BBDEFB;">Convert Category &#9662;</button>
+      <div id="convertBox" style="display:none; margin-top:10px;">
+        <select id="convertTarget" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+          <option value="Medicine">Medicine</option>
+          <option value="OT">OT</option>
+          <option value="Dialysis">Dialysis</option>
+          <option value="Chemo">Chemo</option>
+        </select>
+        <input type="number" id="convertLos" min="1" placeholder="LOS days for new category" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+        <button onclick="convertCategory()" style="background:#E53935;">Confirm Conversion</button>
+        <p id="convertStatus" class="slot-status"></p>
+        <div id="categoryHistory" class="slot-status"></div>
+      </div>
+    </div>
     <div id="slotsContainer"></div>
 
     <div class="discharge-section">
@@ -756,6 +772,11 @@
 
     let currentPatient = null;
 
+    function toggleConvertBox() {
+      const box = document.getElementById('convertBox');
+      box.style.display = box.style.display === "none" ? "block" : "none";
+    }
+
     function toggleEditBox() {
       const box = document.getElementById('editBox');
       box.style.display = box.style.display === "none" ? "block" : "none";
@@ -767,6 +788,8 @@
 
     function fillEditFields() {
       const p = currentPatient;
+      document.getElementById('currentCategoryLabel').innerText = p.patient_category;
+      loadCategoryHistory();
       document.getElementById('editWard').value = p.ward || "";
       document.getElementById('editBed').value = p.bed_no || "";
       if (p.patient_category === "Medicine") {
@@ -783,7 +806,8 @@
       const box = document.getElementById('losBanner');
       box.innerHTML = "";
       if (p.is_discharged || !p.los_days || p.patient_category === "Medicine" || !p.admission_date) return;
-      const dayNo = Math.round((new Date(today) - new Date(p.admission_date)) / 86400000) + 1;
+      const losStart = p.los_start_date || p.admission_date;
+      const dayNo = Math.round((new Date(today) - new Date(losStart)) / 86400000) + 1;
       const left = p.los_days - dayNo;
       if (left < 0) {
         box.innerHTML = '<div style="background:#FDECEA; color:#E53935; padding:10px; border-radius:8px; font-weight:600; margin-bottom:10px;">&#9888; LOS EXCEEDED by ' + (-left) + ' day(s). Discharge and readmit on paper.</div>';
@@ -826,6 +850,50 @@
       status.innerText = "Saved.";
       showLosBanner();
       loadWardHistory();
+    }
+
+    async function convertCategory() {
+      const p = currentPatient;
+      const newCategory = document.getElementById('convertTarget').value;
+      const status = document.getElementById('convertStatus');
+
+      if (newCategory === p.patient_category) {
+        status.innerText = "Already in that category.";
+        return;
+      }
+      if (!confirm('Convert this patient from ' + p.patient_category + ' to ' + newCategory + '?')) return;
+
+      const losRaw = document.getElementById('convertLos').value;
+      const update = { patient_category: newCategory };
+      if (newCategory !== "Medicine") {
+        update.los_days = losRaw ? parseInt(losRaw) : null;
+        update.los_start_date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      } else {
+        update.los_days = null;
+        update.los_start_date = null;
+      }
+
+      const { error } = await supabaseClient.from('Patients').update(update).eq('mrd', mrd);
+      if (error) { status.innerText = "Error: " + error.message; return; }
+
+      await supabaseClient.from('category_history').insert([{
+        mrd: mrd, old_category: p.patient_category, new_category: newCategory, changed_by: currentUserEmail
+      }]);
+
+      status.innerText = "Converted. Reloading...";
+      setTimeout(() => window.location.reload(), 800);
+    }
+
+    async function loadCategoryHistory() {
+      const { data, error } = await supabaseClient
+        .from('category_history').select('*').eq('mrd', mrd)
+        .order('changed_at', { ascending: false });
+      const box = document.getElementById('categoryHistory');
+      if (error || !data || data.length === 0) { box.innerHTML = ""; return; }
+      box.innerHTML = '<strong>Conversion history</strong><br>' + data.map(h =>
+        esc(new Date(h.changed_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })) + ': ' +
+        esc(h.old_category) + ' &rarr; ' + esc(h.new_category) + ' (' + esc(h.changed_by) + ')'
+      ).join('<br>');
     }
 
     async function loadWardHistory() {
