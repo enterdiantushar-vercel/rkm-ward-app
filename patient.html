@@ -358,7 +358,7 @@
 
       document.getElementById('patientName').innerText = patient.name;
       document.getElementById('patientInfo').innerText =
-        `MRD: ${patient.mrd} | Ward: ${patient.ward} | Bed: ${patient.bed_no} | Category: ${patient.patient_category}`;
+       `MRD: ${patient.mrd} | PMJAY: ${patient.pmjay_id || "-"} | Ward: ${patient.ward} | Bed: ${patient.bed_no} | Category: ${patient.patient_category}`;
       patientCategory = patient.patient_category;
       currentPatient = patient;
       fillEditFields();
