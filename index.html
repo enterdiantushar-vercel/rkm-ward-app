@@ -405,7 +405,7 @@
 
       const { error } = await supabaseClient
         .from('Patients')
-        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, los_days, is_discharged: false }]);
+        .insert([{ mrd, name, ward, bed_no, admission_date, patient_category, los_days, los_start_date: los_days ? admission_date : null, is_discharged: false }]);
 
       if (error) {
         addMessage.innerText = "Error: " + error.message;
@@ -464,7 +464,9 @@
     function losHtml(p) {
       if (p.is_discharged || !p.los_days || p.patient_category === "Medicine" || !p.admission_date) return "";
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      const dayNo = Math.round((new Date(today) - new Date(p.admission_date)) / 86400000) + 1;
+      const losStart = p.los_start_date || p.admission_date;
+    
+      const dayNo = Math.round((new Date(today) - new Date(losStart)) / 86400000) + 1;
       const left = p.los_days - dayNo;
       if (left < 0) return `<div class="status-line" style="color:#E53935;">&#9888; LOS EXCEEDED by ${-left} day(s). Discharge and readmit on paper.</div>`;
       if (left === 0) return `<div class="status-line" style="color:#B8860B;">&#9888; LOS ends today (Day ${dayNo} of ${p.los_days})</div>`;
