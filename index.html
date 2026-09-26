@@ -400,8 +400,8 @@
       const los_days = (patient_category !== "Medicine" && los_raw) ? parseInt(los_raw) : null;
       const addMessage = document.getElementById('addMessage');
 
-      if (!mrd || !name || !pmjay_id) {
-        addMessage.innerText = "MRD, PMJAY ID and Name are required.";
+      if (!mrd || !name) {
+        addMessage.innerText = "MRD and Name are required.";
         return;
       }
 
