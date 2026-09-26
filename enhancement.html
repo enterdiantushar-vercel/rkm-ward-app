@@ -166,8 +166,8 @@
         } else {
           const lastTime = parseUTC(lastLog.marked_at);
           const nextDue = new Date(lastTime.getTime() + 48 * 60 * 60 * 1000);
-          lastText = "Last: " + lastTime.toLocaleString() + " by " + lastLog.marked_by;
-          nextDueText = "Next due: " + nextDue.toLocaleString();
+         lastText = "Last: " + lastTime.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) + " by " + lastLog.marked_by;
+          nextDueText = "Next due: " + nextDue.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' });
           status = nextDue <= now ? "overdue" : "ok";
         }
         return { patient: p, status, lastText, nextDueText };
