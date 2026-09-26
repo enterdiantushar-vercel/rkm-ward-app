@@ -250,7 +250,19 @@
       </div>
     </div>
     <div class="discharge-section" style="border-left-color: var(--sky-blue); margin-top:0; margin-bottom:16px;">
-      <div class="slot-title">Category: <span id="currentCategoryLabel"></span></div>
+<div id="adminBox" style="display:none;" class="discharge-section">
+      <div class="slot-title">Correct Patient Identity (Admin only)</div>
+      <input type="text" id="adminName" placeholder="Patient Name" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+      <input type="text" id="adminPmjay" placeholder="PMJAY Registration ID" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+      <button onclick="saveAdminEdits()">Save Corrections</button>
+      <p id="adminStatus" class="slot-status"></p>
+      <hr style="margin:14px 0; border:none; border-top:1px solid var(--border-light);">
+      <div class="slot-title" style="color:#E53935;">Correct MRD (careful — affects all records)</div>
+      <input type="text" id="adminNewMrd" placeholder="New MRD" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+      <button onclick="correctMrd()" style="background: var(--danger);">Correct MRD</button>
+      <p id="mrdStatus" class="slot-status"></p>
+    </div>
+    <div class="slot-title">Category: <span id="currentCategoryLabel"></span></div>
       <button type="button" onclick="toggleConvertBox()" style="background:#fff; color:#2196F3; border:1.5px solid #BBDEFB;">Convert Category &#9662;</button>
       <div id="convertBox" style="display:none; margin-top:10px;">
         <select id="convertTarget" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
@@ -344,6 +356,13 @@
       }
       currentUserEmail = sessionData.session.user.email;
       startInactivityTimer();
+
+      const { data: roleRow } = await supabaseClient
+        .from('staff_roles')
+        .select('is_admin')
+        .eq('user_id', sessionData.session.user.id)
+        .maybeSingle();
+      isAdmin = !!(roleRow && roleRow.is_admin);
 
       const { data: patient, error } = await supabaseClient
         .from('Patients')
@@ -770,7 +789,8 @@
       return pdf.output('blob');
     }
 
-    let currentPatient = null;
+let currentPatient = null;
+    let isAdmin = false;
 
     function toggleConvertBox() {
       const box = document.getElementById('convertBox');
@@ -788,7 +808,12 @@
 
     function fillEditFields() {
       const p = currentPatient;
-      document.getElementById('currentCategoryLabel').innerText = p.patient_category;
+     document.getElementById('currentCategoryLabel').innerText = p.patient_category;
+      if (isAdmin) {
+        document.getElementById('adminBox').style.display = "block";
+        document.getElementById('adminName').value = p.name || "";
+        document.getElementById('adminPmjay').value = p.pmjay_id || "";
+      }
       loadCategoryHistory();
       document.getElementById('editWard').value = p.ward || "";
       document.getElementById('editBed').value = p.bed_no || "";
@@ -850,6 +875,47 @@
       status.innerText = "Saved.";
       showLosBanner();
       loadWardHistory();
+    }
+
+   async function correctMrd() {
+      const newMrd = document.getElementById('adminNewMrd').value.trim();
+      const status = document.getElementById('mrdStatus');
+      if (!newMrd) { status.innerText = "Enter the new MRD."; return; }
+      if (!confirm('Change MRD from ' + mrd + ' to ' + newMrd + '? This cannot be easily undone.')) return;
+
+      const { error } = await supabaseClient.rpc('correct_mrd', { old_mrd: mrd, new_mrd: newMrd });
+      if (error) {
+        status.innerText = "Error: " + error.message;
+        return;
+      }
+      alert("MRD corrected. Reloading with the new MRD.");
+      window.location.href = "patient.html?mrd=" + encodeURIComponent(newMrd);
+    }
+
+    async function saveAdminEdits() {
+      const p = currentPatient;
+      const newName = document.getElementById('adminName').value.trim();
+      const newPmjay = document.getElementById('adminPmjay').value.trim();
+      const status = document.getElementById('adminStatus');
+
+      if (!newName) { status.innerText = "Name cannot be empty."; return; }
+
+      const { error } = await supabaseClient
+        .from('Patients')
+        .update({ name: newName, pmjay_id: newPmjay || null })
+        .eq('mrd', mrd);
+
+      if (error) {
+        status.innerText = "Error: " + error.message;
+        return;
+      }
+
+      p.name = newName;
+      p.pmjay_id = newPmjay;
+      document.getElementById('patientName').innerText = newName;
+      document.getElementById('patientInfo').innerText =
+        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id || "-"} | Ward: ${p.ward} | Bed: ${p.bed_no} | Category: ${p.patient_category}`;
+      status.innerText = "Saved.";
     }
 
     async function convertCategory() {
