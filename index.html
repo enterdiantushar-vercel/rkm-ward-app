@@ -294,15 +294,17 @@
       </select>
       <input type="text" id="newBed" placeholder="Bed No.">
       <input type="date" id="newAdmissionDate">
-      <select id="newCategory">
+      <select id="newCategory" onchange="toggleLosVisibility()">
         <option value="Medicine">Medicine</option>
         <option value="OT">OT</option>
         <option value="Dialysis">Dialysis</option>
         <option value="Chemo">Chemo</option>
       </select>
-      <input type="text" id="newLosSearch" list="newLosOptions" placeholder="Search OT/Chemo/Dialysis code or name (optional)">
-      <datalist id="newLosOptions"></datalist>
-      <input type="number" id="newLos" min="1" placeholder="LOS days (OT / Chemo / Dialysis only)">
+      <div id="newLosWrap" style="display:none;">
+        <input type="text" id="newLosSearch" list="newLosOptions" placeholder="Search OT/Chemo/Dialysis code or name (optional)">
+        <datalist id="newLosOptions"></datalist>
+        <input type="number" id="newLos" min="1" placeholder="LOS days (OT / Chemo / Dialysis only)">
+      </div>
       <button onclick="addPatient()">Save Patient</button>
       <p id="addMessage"></p>
     </div>
@@ -417,10 +419,23 @@
       });
     }
 
+    function toggleLosVisibility() {
+      const category = document.getElementById('newCategory').value;
+      const wrap = document.getElementById('newLosWrap');
+      if (category === "Medicine") {
+        wrap.style.display = "none";
+        document.getElementById('newLosSearch').value = "";
+        document.getElementById('newLos').value = "";
+      } else {
+        wrap.style.display = "block";
+      }
+    }
+
     let losSearchReady = false;
     function toggleAddForm() {
       const form = document.getElementById('addForm');
       form.style.display = form.style.display === "none" ? "block" : "none";
+      toggleLosVisibility();
       if (!losSearchReady) {
         losSearchReady = true;
         setupLosSearch('newLosSearch', 'newLosOptions', 'newLos');
