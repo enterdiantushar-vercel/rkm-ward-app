@@ -300,6 +300,8 @@
         <option value="Dialysis">Dialysis</option>
         <option value="Chemo">Chemo</option>
       </select>
+      <input type="text" id="newLosSearch" list="newLosOptions" placeholder="Search OT/Chemo/Dialysis code or name (optional)">
+      <datalist id="newLosOptions"></datalist>
       <input type="number" id="newLos" min="1" placeholder="LOS days (OT / Chemo / Dialysis only)">
       <button onclick="addPatient()">Save Patient</button>
       <p id="addMessage"></p>
@@ -378,9 +380,51 @@
       }
     }
 
+    let losReferenceCache = null;
+    async function loadLosReference() {
+      if (losReferenceCache) return losReferenceCache;
+      const { data, error } = await supabaseClient
+        .from('los_reference')
+        .select('code, package_name, los_days, los_display')
+        .order('code', { ascending: true });
+      losReferenceCache = (!error && data) ? data : [];
+      return losReferenceCache;
+    }
+
+    async function setupLosSearch(searchInputId, datalistId, losInputId) {
+      const list = await loadLosReference();
+      const datalist = document.getElementById(datalistId);
+      const optionMap = {};
+      datalist.innerHTML = list.map(item => {
+        const label = item.code + ' - ' + item.package_name + ' (LOS: ' + (item.los_display || 'not listed') + ')';
+        optionMap[label] = item.los_days;
+        return '<option value="' + label.replace(/"/g, '&quot;') + '"></option>';
+      }).join('');
+
+      const searchInput = document.getElementById(searchInputId);
+      const losInput = document.getElementById(losInputId);
+      searchInput.addEventListener('input', () => {
+        const val = searchInput.value;
+        if (Object.prototype.hasOwnProperty.call(optionMap, val)) {
+          const days = optionMap[val];
+          if (days !== null && days !== undefined) {
+            losInput.value = days;
+          } else {
+            losInput.value = "";
+            losInput.placeholder = "LOS not listed for this package - enter manually";
+          }
+        }
+      });
+    }
+
+    let losSearchReady = false;
     function toggleAddForm() {
       const form = document.getElementById('addForm');
       form.style.display = form.style.display === "none" ? "block" : "none";
+      if (!losSearchReady) {
+        losSearchReady = true;
+        setupLosSearch('newLosSearch', 'newLosOptions', 'newLos');
+      }
     }
 
     function toggleFilters() {
