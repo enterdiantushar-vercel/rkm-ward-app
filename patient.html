@@ -538,13 +538,20 @@
         alert("File not found.");
         return;
       }
-      downloadSignedUrl(entry.photo_url, entry.photo_type);
+      downloadSignedUrl(entry.photo_url, entry.photo_type, entry.uploaded_at);
     }
 
-    async function downloadSignedUrl(path, photoType) {
+    async function downloadSignedUrl(path, photoType, uploadedAt) {
+      const dt = parseUTC(uploadedAt);
+      const dayNum = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric' });
+      const patientName = document.getElementById('patientName').innerText.trim();
+      const fileName = (patientName + ' ' + photoType + ' ' + dayNum)
+        .replace(/[\\/:*?"<>|]/g, '')
+        .trim() + '.pdf';
+
       const { data, error } = await supabaseClient.storage
         .from('patient-photos')
-        .createSignedUrl(path, 300, { download: photoType.replace(/\s+/g, '_') + '.pdf' });
+        .createSignedUrl(path, 300, { download: fileName });
 
       if (error || !data) {
         alert("Could not download file: " + (error ? error.message : "unknown error"));
