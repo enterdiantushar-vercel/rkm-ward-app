@@ -333,7 +333,7 @@
     let inactivityTimer;
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-    const GEOTAG_SLOTS = ["Patient Photo", "Before Procedure", "During Procedure", "After Procedure", "Discharge Photo"];
+    const GEOTAG_SLOTS = ["Patient Photo", "Registration Photos", "Before Procedure", "During Procedure", "After Procedure", "Discharge Photo"];
     function parseUTC(dateStr) {
       if (!dateStr) return new Date();
       if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
@@ -411,6 +411,7 @@
       } else {
         slotTypes = ["Before Procedure", "During Procedure", "After Procedure", "Extra1", "Extra2"];
       }
+      slotTypes = slotTypes.concat(["Registration Photos", "Registration Doc"]);
       currentSlotTypes = slotTypes;
 
       const container = document.getElementById('slotsContainer');
