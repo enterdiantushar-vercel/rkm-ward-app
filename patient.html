@@ -322,6 +322,7 @@
     let activeSlotType = "";
     let patientCategory = "";
     let allPhotoEntries = [];
+    let currentSlotTypes = [];
     let inactivityTimer;
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
@@ -403,6 +404,7 @@
       } else {
         slotTypes = ["Before Procedure", "During Procedure", "After Procedure", "Extra1", "Extra2"];
       }
+      currentSlotTypes = slotTypes;
 
       const container = document.getElementById('slotsContainer');
       container.innerHTML = slotTypes.map(type => `
@@ -411,11 +413,8 @@
           <div id="status-${type}" class="slot-status">Not captured</div>
           <button onclick="triggerCapture('${type}')">Capture</button>
         </div>
-      `).join('');
+      `).join('') + '<div id="previousRecords" style="grid-column: 1 / -1;"></div>';
     }
-
-    // Fetches EVERY photo ever captured for this patient (all dates), not just today's.
-    // This is what makes photos from earlier days of the stay stay visible.
     async function loadAllPhotos() {
       const { data, error } = await supabaseClient
         .from('daily_photos')
@@ -423,35 +422,71 @@
         .eq('mrd', mrd)
         .order('uploaded_at', { ascending: true });
 
-      if (!error && data) {
-        allPhotoEntries = data;
-        const grouped = {};
-        data.forEach((entry, idx) => {
-          if (!grouped[entry.photo_type]) grouped[entry.photo_type] = [];
-          grouped[entry.photo_type].push(idx);
-        });
+      if (error || !data) return;
+      allPhotoEntries = data;
 
-        Object.keys(grouped).forEach(type => {
-          const indexes = grouped[type];
-          const lastEntry = data[indexes[indexes.length - 1]];
-                    const links = indexes.map(idx => {
-            const dt = parseUTC(data[idx].uploaded_at);
-            const label = dt.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
-                          ' ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            return '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View ' + label + '</button>' +
-                   '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download ' + label + '</button>';
-          }).join(' ');
+      function entryHtml(idx) {
+        const e = data[idx];
+        const dt = parseUTC(e.uploaded_at);
+        const label = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) +
+                      ' ' + dt.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+        return '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">' +
+               label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>' +
+               '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
+               '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button></div>';
+      }
 
-          if (type === "Discharge Photo") {
-            document.getElementById('dischargeStatus').innerHTML =
-              'Captured by ' + lastEntry.uploaded_by + '<br>' + links;
-          } else {
-            const statusEl = document.getElementById('status-' + type);
-            if (statusEl) {
-              statusEl.innerHTML = indexes.length + ' capture(s) over the stay, last by ' + lastEntry.uploaded_by + '<br>' + links;
-            }
+      function isToday(idx) {
+        const d = parseUTC(data[idx].uploaded_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        return d === today;
+      }
+
+      function buildStatus(indexes) {
+        const todayIdx = indexes.filter(isToday);
+        const olderIdx = indexes.filter(i => !isToday(i));
+        let html = todayIdx.length
+          ? 'Today: ' + todayIdx.length + ' capture(s)' + todayIdx.map(entryHtml).join('')
+          : 'Not captured today';
+        if (olderIdx.length) {
+          html += '<details style="margin-top:8px;"><summary style="cursor:pointer; color:var(--teal-active); font-weight:600;">Older captures (' +
+                  olderIdx.length + ')</summary>' + olderIdx.slice().reverse().map(entryHtml).join('') + '</details>';
+        }
+        return html;
+      }
+
+      const grouped = {};
+      data.forEach((entry, idx) => {
+        if (!grouped[entry.photo_type]) grouped[entry.photo_type] = [];
+        grouped[entry.photo_type].push(idx);
+      });
+
+      const previousCards = [];
+
+      Object.keys(grouped).forEach(type => {
+        const indexes = grouped[type];
+        if (type === "Discharge Photo") {
+          document.getElementById('dischargeStatus').innerHTML = buildStatus(indexes);
+        } else {
+          const statusEl = document.getElementById('status-' + type);
+          if (statusEl) {
+            statusEl.innerHTML = buildStatus(indexes);
+          } else if (currentSlotTypes.indexOf(type) === -1) {
+            previousCards.push(
+              '<div class="slot-card"><div class="slot-title">' + esc(type) + ' (previous category)</div>' +
+              '<div class="slot-status">' + indexes.length + ' capture(s)' +
+              indexes.slice().reverse().map(entryHtml).join('') + '</div></div>'
+            );
           }
-        });
+        }
+      });
+
+      const prevBox = document.getElementById('previousRecords');
+      if (prevBox) {
+        prevBox.innerHTML = previousCards.length
+          ? '<details style="margin-top:14px;"><summary style="cursor:pointer; font-weight:600; color:var(--teal-active);">Records from before category change (' +
+            previousCards.length + ')</summary>' +
+            '<div style="display:grid; grid-template-columns:1fr; gap:12px; margin-top:8px;">' + previousCards.join('') + '</div></details>'
+          : '';
       }
     }
 
