@@ -508,6 +508,7 @@
 
     function getPatientStatus(p) {
       if (p.is_discharged) return null;
+      if (allPhotosToday.some(ph => ph.mrd === p.mrd && ph.photo_type === "Discharge Photo")) return null;
       const required = REQUIRED_SLOTS[p.patient_category] || [];
       const isDaily = p.patient_category === "Medicine";
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -521,6 +522,21 @@
       const missing = required.filter(slot => !capturedTypes.has(slot));
 
       return { done: required.length - missing.length, total: required.length, missing: missing, isDaily: isDaily };
+    }
+
+    function dischargeHtml(p) {
+      if (p.is_discharged) return "";
+      const dp = allPhotosToday
+        .filter(ph => ph.mrd === p.mrd && ph.photo_type === "Discharge Photo")
+        .sort((a, b) => (a.uploaded_at < b.uploaded_at ? 1 : -1))[0];
+      if (!dp) return "";
+      let dateText = "";
+      if (dp.uploaded_at) {
+        let s = dp.uploaded_at;
+        if (!s.endsWith('Z') && !s.includes('+')) s += 'Z';
+        dateText = " on " + new Date(s).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' });
+      }
+      return `<div class="status-line status-complete">&#10003; Discharge photo captured${dateText}</div>`;
     }
 
     function losHtml(p) {
@@ -560,7 +576,7 @@
           <a href="patient.html?mrd=${p.mrd}" class="patient-card ${cardClass}">
             <div class="patient-name">${p.name} <span style="font-weight:400; color:#777;">(MRD: ${p.mrd} | PMJAY: ${p.pmjay_id || "-"})</span></div>
             <div class="patient-meta">Ward: Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | ${p.patient_category || "-"} | ${p.is_discharged ? "Discharged" : "Active"}</div>
-            ${trackingHtml}${losHtml(p)}
+            ${trackingHtml}${dischargeHtml(p)}${losHtml(p)}
           </a>
         `;
       }).join('');
