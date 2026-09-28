@@ -294,6 +294,13 @@
 
         <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
     <p id="uploadStatus"></p>
+    <div id="pendingBar" style="display:none; position:fixed; left:0; right:0; bottom:0; background:#263238; color:white; padding:12px 16px; z-index:900; box-shadow:0 -2px 10px rgba(0,0,0,0.3);">
+      <div id="pendingText" style="margin-bottom:8px; font-weight:600;"></div>
+      <button onclick="addAnotherPage()">+ Add another page</button>
+      <button onclick="finishPending()" style="background:#43A047; margin-left:6px;">Finish &amp; Upload</button>
+      <button onclick="undoLastPage()" style="background:#78909C; margin-left:6px;">Undo last</button>
+      <button onclick="cancelPending()" style="background:#E53935; margin-left:6px;">Cancel</button>
+    </div>
   </div>
 
   <div id="pdfModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:1000; align-items:center; justify-content:center;">
@@ -596,93 +603,203 @@
     }
 
     function triggerCapture(slotType) {
+      if (pendingFiles.length > 0 && pendingSlot !== slotType) {
+        alert('Please finish or cancel the ' + pendingSlot + ' pages first.');
+        return;
+      }
       activeSlotType = slotType;
       document.getElementById('fileInput').click();
     }
 
-   document.getElementById('fileInput').addEventListener('change', async function(e) {
+   let pendingFiles = [];
+    let pendingSlot = "";
+    const MAX_PDF_BYTES = 950000;
+
+    function showMsg(msg) {
+      document.getElementById('loadingText').innerText = msg;
+      document.getElementById('loadingOverlay').style.display = 'flex';
+    }
+    function hideOverlay() {
+      document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    document.getElementById('fileInput').addEventListener('change', async function(e) {
       const file = e.target.files[0];
+      e.target.value = "";
       if (!file) return;
 
-      const overlay = document.getElementById('loadingOverlay');
-      const loadingText = document.getElementById('loadingText');
-      
-      function showMsg(msg) {
-        loadingText.innerText = msg;
-        overlay.style.display = 'flex';
+      if (GEOTAG_SLOTS.includes(activeSlotType)) {
+        await captureGeotagged(file, activeSlotType);
+      } else {
+        pendingFiles.push(file);
+        pendingSlot = activeSlotType;
+        updatePendingBar();
       }
-      function hideOverlay() {
-        overlay.style.display = 'none';
+    });
+
+    function updatePendingBar() {
+      const bar = document.getElementById('pendingBar');
+      if (pendingFiles.length === 0) {
+        bar.style.display = 'none';
+        return;
       }
+      document.getElementById('pendingText').innerText =
+        pendingSlot + ': ' + pendingFiles.length + ' page(s) ready';
+      bar.style.display = 'block';
+    }
 
-      const needsGeotag = GEOTAG_SLOTS.includes(activeSlotType);
+    function addAnotherPage() {
+      activeSlotType = pendingSlot;
+      document.getElementById('fileInput').click();
+    }
 
-      let lat = null, lon = null, geoStoreText = "";
-      let pdfBlob;
+    function undoLastPage() {
+      pendingFiles.pop();
+      updatePendingBar();
+    }
 
-      try {
-        if (needsGeotag) {
-          showMsg("Getting location...");
-          const loc = await getLocation();
-          lat = loc.lat;
-          lon = loc.lon;
-          geoStoreText = loc.text;
+    function cancelPending() {
+      if (!confirm('Discard these ' + pendingFiles.length + ' page(s)?')) return;
+      pendingFiles = [];
+      updatePendingBar();
+    }
 
-          let address = null;
-          if (lat !== null && lon !== null) {
-            showMsg("Fetching address...");
-            address = await getAddress(lat, lon);
-          }
+    async function uploadPdf(pdfBlob, slotType, geoStoreText) {
+      const filePath = `${mrd}/${today}/${slotType}-${Date.now()}.pdf`;
+      const { error: uploadError } = await supabaseClient.storage
+        .from('patient-photos')
+        .upload(filePath, pdfBlob);
 
-          showMsg("Preparing document...");
-          pdfBlob = await buildGeotaggedPdf(file, lat, lon, address, 1280, 0.7);
-        } else {
-          showMsg("Preparing document...");
-          pdfBlob = await buildDocumentPdf(file, 1280, 0.75);
-        }
-
-        showMsg("Uploading, please wait...");
-
-        const filePath = `${mrd}/${today}/${activeSlotType}-${Date.now()}.pdf`;
-        const { data: uploadData, error: uploadError } = await supabaseClient.storage
-          .from('patient-photos')
-          .upload(filePath, pdfBlob);
-
-        if (uploadError) {
-          hideOverlay();
-          alert("Upload failed: " + uploadError.message);
-          return;
-        }
-
-        const { error: insertError } = await supabaseClient
-          .from('daily_photos')
-          .insert([{
-            mrd: mrd,
-            photo_date: today,
-            photo_type: activeSlotType,
-            photo_url: filePath,
-            file_type: "pdf",
-            geo_location: geoStoreText,
-            uploaded_by: currentUserEmail
-          }]);
-
-        if (insertError) {
-          hideOverlay();
-          alert("Save failed: " + insertError.message);
-          return;
-        }
-
-        await loadAllPhotos();
-
+      if (uploadError) {
         hideOverlay();
-        alert(activeSlotType + " saved successfully!");
+        alert("Upload failed: " + uploadError.message);
+        return false;
+      }
+
+      const { error: insertError } = await supabaseClient
+        .from('daily_photos')
+        .insert([{
+          mrd: mrd,
+          photo_date: today,
+          photo_type: slotType,
+          photo_url: filePath,
+          file_type: "pdf",
+          geo_location: geoStoreText,
+          uploaded_by: currentUserEmail
+        }]);
+
+      if (insertError) {
+        hideOverlay();
+        alert("Save failed: " + insertError.message);
+        return false;
+      }
+
+      await loadAllPhotos();
+      return true;
+    }
+
+    async function captureGeotagged(file, slotType) {
+      try {
+        showMsg("Getting location...");
+        const loc = await getLocation();
+        let address = null;
+        if (loc.lat !== null && loc.lon !== null) {
+          showMsg("Fetching address...");
+          address = await getAddress(loc.lat, loc.lon);
+        }
+        showMsg("Preparing document...");
+        const pdfBlob = await buildGeotaggedPdf(file, loc.lat, loc.lon, address, 1280, 0.7);
+        showMsg("Uploading, please wait...");
+        const ok = await uploadPdf(pdfBlob, slotType, loc.text);
+        hideOverlay();
+        if (ok) alert(slotType + " saved successfully!");
       } catch (err) {
         hideOverlay();
         alert("An error occurred: " + err.message);
-      } finally {
-        e.target.value = "";
       }
-    });
+    }
+
+    function loadImageFromFile(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => resolve({ img, url });
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Could not read one of the photos"));
+        };
+        img.src = url;
+      });
+    }
+
+    function makeMultiPagePdf(items, maxW, quality) {
+      const { jsPDF } = window.jspdf;
+      let pdf = null;
+      items.forEach((item, i) => {
+        const nw = item.img.naturalWidth;
+        const nh = item.img.naturalHeight;
+        const w = Math.min(nw, maxW);
+        const h = Math.round(nh * w / nw);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(item.img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        const orient = w > h ? 'l' : 'p';
+        if (i === 0) {
+          pdf = new jsPDF({ unit: 'px', format: [w, h], orientation: orient });
+        } else {
+          pdf.addPage([w, h], orient);
+        }
+        pdf.addImage(dataUrl, 'JPEG', 0, 0, w, h);
+      });
+      return pdf.output('blob');
+    }
+
+    async function buildMultiPagePdf(files, limitBytes) {
+      const items = [];
+      try {
+        for (const f of files) items.push(await loadImageFromFile(f));
+
+        const attempts = [
+          [1280, 0.70], [1280, 0.55], [1100, 0.55], [1000, 0.50],
+          [900, 0.45], [800, 0.40], [700, 0.40], [600, 0.35]
+        ];
+        let blob = null;
+        for (let i = 0; i < attempts.length; i++) {
+          showMsg("Compressing... (attempt " + (i + 1) + " of " + attempts.length + ")");
+          await new Promise(r => setTimeout(r, 30));
+          blob = makeMultiPagePdf(items, attempts[i][0], attempts[i][1]);
+          if (blob.size <= limitBytes) return { blob, ok: true };
+        }
+        return { blob, ok: false };
+      } finally {
+        items.forEach(it => URL.revokeObjectURL(it.url));
+      }
+    }
+
+    async function finishPending() {
+      if (pendingFiles.length === 0) return;
+      const slot = pendingSlot;
+      const files = pendingFiles.slice();
+      try {
+        showMsg("Combining " + files.length + " page(s)...");
+        const result = await buildMultiPagePdf(files, MAX_PDF_BYTES);
+        showMsg("Uploading, please wait...");
+        const ok = await uploadPdf(result.blob, slot, "");
+        hideOverlay();
+        if (ok) {
+          pendingFiles = [];
+          updatePendingBar();
+          let msg = slot + " saved: " + files.length + " page(s), " + Math.round(result.blob.size / 1024) + " KB.";
+          if (!result.ok) msg += " Note: could not get it below 1 MB.";
+          alert(msg);
+        }
+      } catch (err) {
+        hideOverlay();
+        alert("An error occurred: " + err.message);
+      }
+    }
 
 
     function getLocation() {
