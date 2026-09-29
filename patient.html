@@ -254,7 +254,13 @@
       </div>
     </div>
     <div class="discharge-section" style="border-left-color: var(--sky-blue); margin-top:0; margin-bottom:16px;">
-<div id="adminBox" style="display:none;" class="discharge-section">
+<div id="addPmjayBox" style="display:none;" class="discharge-section">
+      <div class="slot-title">Add PMJAY Registration ID</div>
+      <input type="text" id="fillPmjayId" placeholder="PMJAY Registration ID" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+      <button onclick="fillPmjayId()">Save</button>
+      <p id="fillPmjayStatus" class="slot-status"></p>
+    </div>
+    <div id="adminBox" style="display:none;" class="discharge-section">
       <div class="slot-title">Correct Patient Identity (Admin only)</div>
       <input type="text" id="adminName" placeholder="Patient Name" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
       <input type="text" id="adminPmjay" placeholder="PMJAY Registration ID" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
@@ -1026,6 +1032,8 @@ let currentPatient = null;
         document.getElementById('adminBox').style.display = "block";
         document.getElementById('adminName').value = p.name || "";
         document.getElementById('adminPmjay').value = p.pmjay_id || "";
+      } else if (!p.pmjay_id) {
+        document.getElementById('addPmjayBox').style.display = "block";
       }
       loadCategoryHistory();
       document.getElementById('editWard').value = p.ward || "";
@@ -1103,6 +1111,29 @@ let currentPatient = null;
       }
       alert("MRD corrected. Reloading with the new MRD.");
       window.location.href = "patient.html?mrd=" + encodeURIComponent(newMrd);
+    }
+
+    async function fillPmjayId() {
+      const p = currentPatient;
+      const newPmjay = document.getElementById('fillPmjayId').value.trim();
+      const status = document.getElementById('fillPmjayStatus');
+      if (!newPmjay) { status.innerText = "Enter a PMJAY ID."; return; }
+
+      const { error } = await supabaseClient
+        .from('Patients')
+        .update({ pmjay_id: newPmjay })
+        .eq('mrd', mrd);
+
+      if (error) {
+        status.innerText = "Error: " + error.message;
+        return;
+      }
+
+      p.pmjay_id = newPmjay;
+      document.getElementById('patientInfo').innerText =
+        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id} | Ward: ${p.ward} | Bed: ${p.bed_no} | Category: ${p.patient_category}`;
+      status.innerText = "Saved.";
+      document.getElementById('addPmjayBox').style.display = "none";
     }
 
     async function saveAdminEdits() {
