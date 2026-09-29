@@ -449,7 +449,7 @@
 
     async function addPatient() {
       const mrd = document.getElementById('newMrd').value;
-      const pmjay_id = document.getElementById('newPmjayId').value.trim();
+      const pmjay_id = document.getElementById('newPmjayId').value.trim() || null;
       const name = document.getElementById('newName').value;
       const ward = document.getElementById('newWard').value;
       const bed_no = document.getElementById('newBed').value;
