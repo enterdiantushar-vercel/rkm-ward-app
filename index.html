@@ -400,7 +400,8 @@
       const { data, error } = await supabaseClient
         .from('los_reference')
         .select('code, package_name, los_days, los_display')
-        .order('code', { ascending: true });
+        .order('code', { ascending: true })
+        .limit(2000);
       losReferenceCache = (!error && data) ? data : [];
       return losReferenceCache;
     }
@@ -501,20 +502,24 @@
         .order('name', { ascending: true });
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      const { data: photoData, error: photoError } = await supabaseClient
-        .from('daily_photos')
-        .select('*')
-        .limit(11000);
 
-      if (!photoError && photoData) {
-        allPhotosToday = photoData;
-      }
+      const activeMrds = (data || []).filter(p => !p.is_discharged).map(p => p.mrd);
+      const { data: photoData, error: photoError } = activeMrds.length
+        ? await supabaseClient
+            .from('daily_photos')
+            .select('mrd, photo_type, photo_date, uploaded_at')
+            .in('mrd', activeMrds)
+        : { data: [], error: null };
 
       const nowStamp = new Date();
       const dbg = document.getElementById('debugInfo');
       if (dbg) {
         dbg.innerText = "Data fetched at " + nowStamp.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' }) +
-          " IST | Treating today as: " + today;
+          " IST | Treating today as: " + today + " | Photo rows: " + (photoData ? photoData.length : 0);
+      }
+
+      if (!photoError && photoData) {
+        allPhotosToday = photoData;
       }
 
       if (!error && data) {
