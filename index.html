@@ -501,9 +501,12 @@
         .order('name', { ascending: true });
 
       const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-      const { data: photoData, error: photoError } = await supabaseClient
-        .from('daily_photos')
-        .select('*');
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const { data: photoData, error: photoError } = await supabaseClient
+  .from('daily_photos')
+  .select('*')
+  .or(`photo_date.eq.${today},uploaded_at.gte.${today}T00:00:00`)
+  .limit(5000);
 
       if (!photoError && photoData) {
         allPhotosToday = photoData;
