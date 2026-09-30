@@ -164,83 +164,98 @@
       const { data: patients, error: pErr } = await supabaseClient
         .from('Patients')
         .select('*')
-        .eq('is_discharged', false)
-        .eq('patient_category', 'Medicine');
+        .eq('is_discharged', false);
 
-      const { data: logs, error: lErr } = await supabaseClient
-        .from('enhancement_log')
-        .select('*')
-        .order('marked_at', { ascending: true })
-        .limit(10000);
-
-      if (pErr || lErr || !patients) {
+      if (pErr || !patients) {
         document.getElementById('list').innerText = "Error loading tracker.";
         return;
       }
 
+      const activeMrds = patients.map(p => p.mrd);
+      if (activeMrds.length === 0) {
+        document.getElementById('summary').innerText = "0 of 0 patients need enhancement now.";
+        document.getElementById('list').innerHTML = "<p>No active patients.</p>";
+        return;
+      }
+
+      const { data: logs, error: lErr } = await supabaseClient
+        .from('enhancement_log')
+        .select('mrd, marked_at, marked_by')
+        .in('mrd', activeMrds)
+        .order('marked_at', { ascending: true });
+
+      const { data: dischargePhotos } = await supabaseClient
+        .from('daily_photos')
+        .select('mrd, uploaded_at')
+        .eq('photo_type', 'Discharge Photo')
+        .in('mrd', activeMrds);
+
+      if (lErr) {
+        document.getElementById('list').innerText = "Error loading tracker.";
+        return;
+      }
+
+      const dischargeMap = {};
+      (dischargePhotos || []).forEach(dp => {
+        if (!dischargeMap[dp.mrd] || dp.uploaded_at > dischargeMap[dp.mrd]) {
+          dischargeMap[dp.mrd] = dp.uploaded_at;
+        }
+      });
+
       const now = new Date();
       const results = patients.map(p => {
-        const patientLogs = logs.filter(l => l.mrd === p.mrd);
+        const patientLogs = (logs || []).filter(l => l.mrd === p.mrd);
+        const lastLog = patientLogs.length > 0 ? patientLogs[patientLogs.length - 1] : null;
         const totalEnhancements = patientLogs.length;
-        const lastLog = totalEnhancements > 0 ? patientLogs[totalEnhancements - 1] : null;
 
-        let status, nextDueText, lastText, lastDateForCsv;
+        if (dischargeMap[p.mrd]) {
+          const dt = parseUTC(dischargeMap[p.mrd]);
+          return {
+            patient: p, status: "dischargePending", totalEnhancements,
+            lastText: "Discharge photo captured on " + dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }),
+            nextDueText: ""
+          };
+        }
+
+        let status, nextDueText, lastText;
         if (!lastLog) {
           status = "never";
           lastText = "Never enhanced";
           nextDueText = "Due now";
-          lastDateForCsv = "";
         } else {
           const lastTime = parseUTC(lastLog.marked_at);
           const nextDue = new Date(lastTime.getTime() + 48 * 60 * 60 * 1000);
-          lastText = "Last: " + formatDateTime(lastLog.marked_at) + " by " + lastLog.marked_by;
+          lastText = "Last: " + lastTime.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) + " by " + lastLog.marked_by;
           nextDueText = "Next due: " + nextDue.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' });
           status = nextDue <= now ? "overdue" : "ok";
-          lastDateForCsv = formatDateTime(lastLog.marked_at);
         }
-
-        // Full history lines (newest first)
-        const historyHtml = patientLogs.length === 0
-          ? ""
-          : `<div class="history-list"><strong>History (${totalEnhancements}):</strong>` +
-            patientLogs.slice().reverse().map(l =>
-              `<div>${formatDateTime(l.marked_at)} — ${l.marked_by || "unknown"}</div>`
-            ).join("") + `</div>`;
-
-        return {
-          patient: p,
-          status,
-          lastText,
-          nextDueText,
-          totalEnhancements,
-          lastDateForCsv,
-          historyHtml,
-          patientLogs
-        };
+        return { patient: p, status, lastText, nextDueText, totalEnhancements };
       });
 
-      const order = { never: 0, overdue: 1, ok: 2 };
+      const order = { never: 0, overdue: 1, ok: 2, dischargePending: 3 };
       results.sort((a, b) => order[a.status] - order[b.status]);
-      lastResults = results;
 
-      const needCount = results.filter(r => r.status !== "ok").length;
+      const overdueCount = results.filter(r => r.status !== "ok" && r.status !== "dischargePending").length;
       document.getElementById('summary').innerText =
-        `${needCount} of ${results.length} Medicine patients need enhancement now.`;
+        `${overdueCount} of ${results.length} patients need enhancement now.`;
 
-      document.getElementById('list').innerHTML = results.map(r => {
+            document.getElementById('list').innerHTML = results.map(r => {
         const p = r.patient;
-        const badgeText = r.status === "ok" ? "Up to date" : (r.status === "never" ? "Never enhanced" : "Overdue");
-        const buttonHtml = r.status === "ok"
-          ? `<button disabled style="background:#B0BEC5; cursor:not-allowed;">Not due yet (${r.totalEnhancements} times)</button>`
-          : `<button onclick="markEnhanced('${p.mrd}')">Mark Enhanced (${r.totalEnhancements} times so far)</button>`;
+        const badgeText = r.status === "ok" ? "Up to date"
+          : r.status === "dischargePending" ? "Discharge photo captured"
+          : r.status === "never" ? "Never enhanced" : "Overdue";
+        const cardClass = r.status === "dischargePending" ? "ok" : r.status;
+        const buttonHtml = (r.status === "ok" || r.status === "dischargePending")
+          ? `<button disabled style="background:#B0BEC5; cursor:not-allowed;">${r.status === "dischargePending" ? "No longer needed" : "Not due yet"}</button>`
+          : `<button onclick="markEnhanced('${p.mrd}')">Mark Enhanced</button>`;
         return `
-          <div class="patient-card ${r.status}">
+          <div class="patient-card ${cardClass}">
             <div class="patient-name">${p.name} (MRD: ${p.mrd})</div>
-            <div class="patient-meta">Ward: ${p.ward || "-"} | Bed: ${p.bed_no || "-"}</div>
+            <div class="patient-meta">Ward: ${p.ward} | ${p.patient_category || "-"}</div>
             <div class="status-badge">${badgeText}</div>
             <div class="patient-meta">${r.lastText}</div>
             <div class="patient-meta">${r.nextDueText}</div>
-            ${r.historyHtml}
+            <div class="patient-meta">Total times enhancement marked: ${r.totalEnhancements}</div>
             ${buttonHtml}
           </div>
         `;
