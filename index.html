@@ -526,22 +526,36 @@
     }
 
     function getPatientStatus(p) {
-      if (p.is_discharged) return null;
-      if (allPhotosToday.some(ph => ph.mrd === p.mrd && ph.photo_type === "Discharge Photo")) return null;
-      const required = REQUIRED_SLOTS[p.patient_category] || [];
-      const isDaily = p.patient_category === "Medicine";
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  if (p.is_discharged) return null;
+  if (allPhotosToday.some(ph => ph.mrd === p.mrd && ph.photo_type === "Discharge Photo")) return null;
 
-      const patientPhotos = allPhotosToday.filter(ph => ph.mrd === p.mrd);
-      const relevantPhotos = isDaily
-        ? patientPhotos.filter(ph => ph.photo_date === today)
-        : patientPhotos;
+  const required = REQUIRED_SLOTS[p.patient_category] || [];
+  const isDaily = p.patient_category === "Medicine";
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
-      const capturedTypes = new Set(relevantPhotos.map(ph => ph.photo_type));
-      const missing = required.filter(slot => !capturedTypes.has(slot));
+  const patientPhotos = allPhotosToday.filter(ph => ph.mrd === p.mrd);
 
-      return { done: required.length - missing.length, total: required.length, missing: missing, isDaily: isDaily };
-    }
+  // SAME logic as patient.html – use uploaded_at instead of photo_date
+  const relevantPhotos = isDaily
+    ? patientPhotos.filter(ph => {
+        if (!ph.uploaded_at) return false;
+        let s = ph.uploaded_at;
+        if (!s.endsWith('Z') && !s.includes('+')) s += 'Z';
+        const d = new Date(s).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        return d === today;
+      })
+    : patientPhotos;
+
+  const capturedTypes = new Set(relevantPhotos.map(ph => ph.photo_type));
+  const missing = required.filter(slot => !capturedTypes.has(slot));
+
+  return {
+    done: required.length - missing.length,
+    total: required.length,
+    missing,
+    isDaily
+  };
+}
 
     function dischargeHtml(p) {
       if (p.is_discharged) return "";
