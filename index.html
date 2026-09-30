@@ -504,7 +504,7 @@
       const { data: photoData, error: photoError } = await supabaseClient
         .from('daily_photos')
         .select('*')
-        .limit(10000);
+        .limit(11000);
 
       if (!photoError && photoData) {
         allPhotosToday = photoData;
