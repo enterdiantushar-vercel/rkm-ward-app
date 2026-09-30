@@ -236,6 +236,7 @@
     </div>
 
     <button class="btn-secondary" onclick="toggleFilters()" type="button">Filters &#9662;</button>
+    <p id="debugInfo" style="font-size:11px; color:#999; margin:0 0 8px;"></p>
     <div id="filterPanel" style="display:none;">
       <strong>Filter by Ward:</strong><br>
       <div id="wardCheckboxes">
@@ -506,6 +507,13 @@
 
       if (!photoError && photoData) {
         allPhotosToday = photoData;
+      }
+
+      const nowStamp = new Date();
+      const dbg = document.getElementById('debugInfo');
+      if (dbg) {
+        dbg.innerText = "Data fetched at " + nowStamp.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' }) +
+          " IST | Treating today as: " + today;
       }
 
       if (!error && data) {
