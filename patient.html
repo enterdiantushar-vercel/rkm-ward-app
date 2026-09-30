@@ -444,10 +444,19 @@
         const dt = parseUTC(e.uploaded_at);
         const label = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) +
                       ' ' + dt.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
-        return '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">' +
+        let html = '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">' +
                label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>' +
                '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
-               '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button></div>';
+               '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>';
+        if (isAdmin) {
+          const moveOptions = currentSlotTypes.concat(['Discharge Photo']).filter(t => t !== e.photo_type);
+          html += '<br><select id="moveSel_' + e.id + '" style="margin-top:6px; padding:6px; font-size:13px;">' +
+            moveOptions.map(t => '<option value="' + esc(t) + '">Move to: ' + esc(t) + '</option>').join('') +
+            '</select> ' +
+            '<button class="download-btn" style="border-color:#2196F3; color:#2196F3;" onclick="adminMoveCapture(' + e.id + ')">Move</button> ' +
+            '<button class="download-btn" style="border-color:var(--danger); color:var(--danger);" onclick="adminDeleteCapture(' + e.id + ', \'' + e.photo_url + '\')">Delete</button>';
+        }
+        return html + '</div>';
       }
 
       function isToday(idx) {
@@ -1098,7 +1107,42 @@ let currentPatient = null;
       loadWardHistory();
     }
 
-   async function correctMrd() {
+   async function adminMoveCapture(id) {
+      const sel = document.getElementById('moveSel_' + id);
+      const newType = sel.value;
+      if (!confirm('Move this capture to "' + newType + '"?')) return;
+
+      const { error } = await supabaseClient
+        .from('daily_photos')
+        .update({ photo_type: newType })
+        .eq('id', id);
+
+      if (error) {
+        alert("Could not move it: " + error.message);
+        return;
+      }
+      await loadAllPhotos();
+      alert("Moved.");
+    }
+
+    async function adminDeleteCapture(id, path) {
+      if (!confirm('Permanently delete this capture? This cannot be undone.')) return;
+
+      const { error: storageErr } = await supabaseClient.storage.from('patient-photos').remove([path]);
+      if (storageErr) {
+        alert("Could not delete the file: " + storageErr.message);
+        return;
+      }
+      const { error: dbErr } = await supabaseClient.from('daily_photos').delete().eq('id', id);
+      if (dbErr) {
+        alert("File deleted, but the record could not be removed: " + dbErr.message);
+        return;
+      }
+      await loadAllPhotos();
+      alert("Deleted.");
+    }
+
+    async function correctMrd() {
       const newMrd = document.getElementById('adminNewMrd').value.trim();
       const status = document.getElementById('mrdStatus');
       if (!newMrd) { status.innerText = "Enter the new MRD."; return; }
