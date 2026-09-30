@@ -445,16 +445,20 @@
         const label = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) +
                       ' ' + dt.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
         let html = '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">' +
-               label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>' +
-               '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
-               '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>';
+               label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>';
+        if (e.photo_url) {
+          html += '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
+                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>';
+        } else {
+          html += '<span style="color:#90A4AE; font-style:italic;">File auto-removed after 6 days (already saved to hospital server)</span>';
+        }
         if (isAdmin) {
           const moveOptions = currentSlotTypes.concat(['Discharge Photo']).filter(t => t !== e.photo_type);
           html += '<br><select id="moveSel_' + e.id + '" style="margin-top:6px; padding:6px; font-size:13px;">' +
             moveOptions.map(t => '<option value="' + esc(t) + '">Move to: ' + esc(t) + '</option>').join('') +
             '</select> ' +
             '<button class="download-btn" style="border-color:#2196F3; color:#2196F3;" onclick="adminMoveCapture(' + e.id + ')">Move</button> ' +
-            '<button class="download-btn" style="border-color:var(--danger); color:var(--danger);" onclick="adminDeleteCapture(' + e.id + ', \'' + e.photo_url + '\')">Delete</button>';
+            '<button class="download-btn" style="border-color:var(--danger); color:var(--danger);" onclick="adminDeleteCapture(' + e.id + ', ' + (e.photo_url ? "'" + e.photo_url + "'" : 'null') + ')">Delete</button>';
         }
         return html + '</div>';
       }
@@ -1128,14 +1132,16 @@ let currentPatient = null;
     async function adminDeleteCapture(id, path) {
       if (!confirm('Permanently delete this capture? This cannot be undone.')) return;
 
-      const { error: storageErr } = await supabaseClient.storage.from('patient-photos').remove([path]);
-      if (storageErr) {
-        alert("Could not delete the file: " + storageErr.message);
-        return;
+      if (path) {
+        const { error: storageErr } = await supabaseClient.storage.from('patient-photos').remove([path]);
+        if (storageErr) {
+          alert("Could not delete the file: " + storageErr.message);
+          return;
+        }
       }
       const { error: dbErr } = await supabaseClient.from('daily_photos').delete().eq('id', id);
       if (dbErr) {
-        alert("File deleted, but the record could not be removed: " + dbErr.message);
+        alert("Could not remove the record: " + dbErr.message);
         return;
       }
       await loadAllPhotos();
