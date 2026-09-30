@@ -365,6 +365,17 @@
     }
     checkSession();
 
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && document.getElementById('logoutBtn').style.display !== "none") {
+        loadPatients();
+      }
+    });
+    window.addEventListener('pageshow', () => {
+      if (document.getElementById('logoutBtn').style.display !== "none") {
+        loadPatients();
+      }
+    });
+
     async function login() {
       const email = document.getElementById('email').value;
       const password = document.getElementById('password').value;
