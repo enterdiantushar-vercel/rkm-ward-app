@@ -169,7 +169,7 @@
       transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
       user-select: none;
     }
-    .chip-group label:has(input:checked) {
+    .chip-group label.active {
       background: var(--teal-active);
       border-color: var(--teal-active);
       color: white;
@@ -179,7 +179,13 @@
       width: 14px;
       height: 14px;
       margin-right: 6px;
-      accent-color: white;
+      accent-color: var(--teal-active);
+    }
+    .filter-section-title {
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
     }
     #addForm {
       background: var(--card-bg);
@@ -262,8 +268,8 @@
 
     <button class="btn-secondary" onclick="toggleFilters()" type="button">Filters <span id="filterCountBadge"></span> &#9662;</button>
     <div id="filterPanel" style="display:none;">
-      <div class="filter-section-title">Ward</div>
-      <div id="wardCheckboxes" class="chip-group">
+      <div class="filter-section-title" onclick="toggleSection('wardCheckboxes','wardChevron')">Ward <span id="wardChevron">&#9656;</span></div>
+      <div id="wardCheckboxes" class="chip-group" style="display:none;">
         <label><input type="checkbox" value="NICU 1" onchange="filterList()"> NICU 1</label>
         <label><input type="checkbox" value="NICU 2" onchange="filterList()"> NICU 2</label>
         <label><input type="checkbox" value="PICU" onchange="filterList()"> PICU</label>
@@ -285,8 +291,8 @@
         <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
         <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
       </div>
-      <div class="filter-section-title" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border-light);">Category</div>
-      <div id="categoryCheckboxes" class="chip-group">
+      <div class="filter-section-title" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border-light);" onclick="toggleSection('categoryCheckboxes','categoryChevron')">Category <span id="categoryChevron">&#9656;</span></div>
+      <div id="categoryCheckboxes" class="chip-group" style="display:none;">
         <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
         <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
         <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
@@ -490,6 +496,20 @@
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
 
+    function toggleSection(groupId, chevronId) {
+      const group = document.getElementById(groupId);
+      const chevron = document.getElementById(chevronId);
+      const isOpen = group.style.display === "flex" || group.style.display === "block";
+      group.style.display = isOpen ? "none" : "flex";
+      chevron.innerHTML = isOpen ? "&#9656;" : "&#9662;";
+    }
+
+    function syncChipHighlights() {
+      document.querySelectorAll('.chip-group input[type="checkbox"]').forEach(cb => {
+        cb.closest('label').classList.toggle('active', cb.checked);
+      });
+    }
+
     async function addPatient() {
       const mrd = document.getElementById('newMrd').value;
       const pmjay_id = document.getElementById('newPmjayId').value.trim() || null;
@@ -652,6 +672,7 @@
     }
 
     function filterList() {
+      syncChipHighlights();
       const query = document.getElementById('searchInput').value.toLowerCase();
 
       const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
@@ -674,6 +695,7 @@
         function clearFilters() {
       document.getElementById('searchInput').value = "";
       document.querySelectorAll('#wardCheckboxes input, #categoryCheckboxes input').forEach(cb => cb.checked = false);
+      syncChipHighlights();
       filterList();
     }
   </script>
