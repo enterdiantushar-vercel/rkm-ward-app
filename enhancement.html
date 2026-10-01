@@ -105,7 +105,7 @@
     <div class="container">
         <div class="top-bar">
             <p id="summary" style="margin:0; flex:1;"></p>
-            <button onclick="downloadCsv()">Download CSV (Ward-wise)</button>
+            <button onclick="downloadCsv()">Download Pending CSV (Ward-wise)</button>
         </div>
         <div id="list">Loading...</div>
     </div>
@@ -289,7 +289,15 @@
                 return;
             }
 
-            const sorted = [...lastResults].sort((a, b) => {
+            // Filter to include ONLY pending/non-enhanced patients (overdue or never enhanced)
+            const pendingResults = lastResults.filter(r => r.status === "never" || r.status === "overdue");
+
+            if (pendingResults.length === 0) {
+                alert("No pending/overdue patients to download.");
+                return;
+            }
+
+            const sorted = [...pendingResults].sort((a, b) => {
                 const w = (a.patient.ward || "").localeCompare(b.patient.ward || "");
                 if (w !== 0) return w;
                 return (a.patient.name || "").localeCompare(b.patient.name || "");
@@ -323,7 +331,7 @@
                     p.bed_no || "",
                     p.mrd || "",
                     p.name || "",
-                    r.status === "ok" ? "Up to date" : (r.status === "never" ? "Never enhanced" : "Overdue"),
+                    r.status === "never" ? "Never enhanced" : "Overdue",
                     r.totalEnhancements,
                     r.lastDateForCsv || "",
                     lastBy,
@@ -336,7 +344,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "enhancement-tracker-medicine-" + new Date().toISOString().slice(0,10) + ".csv";
+            a.download = "pending-enhancement-medicine-" + new Date().toISOString().slice(0,10) + ".csv";
             a.click();
             URL.revokeObjectURL(url);
         }
