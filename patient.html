@@ -292,11 +292,13 @@
     <div id="slotsContainer"></div>
 
     <div class="discharge-section">
-   <div class="slot-title">Discharge Management</div>
-   <button onclick="triggerCapture('Discharge Photo')">Capture Discharge Photo (Optional)</button>
-   <button onclick="markPatientDischarged()" style="background: var(--danger); margin-left: 8px;">Mark as Discharged</button>
-   <p id="dischargeStatus" class="slot-status"></p>
- </div>
+      <button type="button" onclick="toggleDischargeBox()" style="background:#fff; color:#E53935; border:1.5px solid #FFCDD2; margin:0;">Discharge Management &#9662;</button>
+      <div id="dischargeBox" style="display:none; margin-top:10px;">
+        <button onclick="triggerCapture('Discharge Photo')">Capture Discharge Photo (Optional)</button>
+        <button onclick="markPatientDischarged()" style="background: var(--danger); margin-left: 8px;">Mark as Discharged</button>
+        <p id="dischargeStatus" class="slot-status"></p>
+      </div>
+    </div>
 
         <input type="file" id="fileInput" accept="image/*" capture="environment" style="display:none;">
     <p id="uploadStatus"></p>
@@ -610,7 +612,7 @@
       // Friendly names for download files (no patient name)
       let displayType = photoType;
       if (photoType === "Patient Photo") {
-        displayType = "GEO TAG PATIENT PHOTO";
+        displayType = "GEO PATIENT TAG PHOTO";
       } else if (photoType === "IPD Chart") {
         displayType = "CLINICAL NOTE";
       } else if (photoType === "Drug Chart") {
@@ -1042,6 +1044,11 @@ let currentPatient = null;
         editLosSearchReady = true;
         setupLosSearch('editLosSearch', 'editLosOptions', 'editLos');
       }
+    }
+
+    function toggleDischargeBox() {
+      const box = document.getElementById('dischargeBox');
+      box.style.display = box.style.display === "none" ? "block" : "none";
     }
 
     function esc(s) {
