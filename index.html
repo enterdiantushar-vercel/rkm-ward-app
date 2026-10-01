@@ -142,19 +142,44 @@
       box-shadow: 0 2px 8px rgba(38,50,56,0.06);
       border: 1px solid var(--border-light);
     }
-    #filterPanel strong { font-size: 13px; color: var(--text-secondary); text-transform: none; }
-    #filterPanel label {
+    .filter-section-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    .chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip-group label {
       display: inline-flex;
       align-items: center;
-      margin: 4px 10px 4px 0;
-      font-size: 14px;
+      padding: 7px 13px;
+      margin: 0;
+      border-radius: 20px;
+      border: 1.5px solid #D3E7E5;
+      background: #FBFEFE;
+      font-size: 13px;
       color: var(--text-primary);
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+      user-select: none;
     }
-    #filterPanel input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      margin-right: 5px;
-      accent-color: var(--teal-active);
+    .chip-group label:has(input:checked) {
+      background: var(--teal-active);
+      border-color: var(--teal-active);
+      color: white;
+      font-weight: 600;
+    }
+    .chip-group input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      margin-right: 6px;
+      accent-color: white;
     }
     #addForm {
       background: var(--card-bg);
@@ -235,11 +260,10 @@
       <input type="text" id="searchInput" placeholder="Filter by name or MRD" onkeyup="filterList()">
     </div>
 
-    <button class="btn-secondary" onclick="toggleFilters()" type="button">Filters &#9662;</button>
-    <p id="debugInfo" style="font-size:11px; color:#999; margin:0 0 8px;"></p>
+    <button class="btn-secondary" onclick="toggleFilters()" type="button">Filters <span id="filterCountBadge"></span> &#9662;</button>
     <div id="filterPanel" style="display:none;">
-      <strong>Filter by Ward:</strong><br>
-      <div id="wardCheckboxes">
+      <div class="filter-section-title">Ward</div>
+      <div id="wardCheckboxes" class="chip-group">
         <label><input type="checkbox" value="NICU 1" onchange="filterList()"> NICU 1</label>
         <label><input type="checkbox" value="NICU 2" onchange="filterList()"> NICU 2</label>
         <label><input type="checkbox" value="PICU" onchange="filterList()"> PICU</label>
@@ -261,14 +285,14 @@
         <label><input type="checkbox" value="ICU" onchange="filterList()"> ICU</label>
         <label><input type="checkbox" value="HDUII" onchange="filterList()"> HDUII</label>
       </div>
-      <br><strong>Filter by Category:</strong><br>
-      <div id="categoryCheckboxes">
+      <div class="filter-section-title" style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border-light);">Category</div>
+      <div id="categoryCheckboxes" class="chip-group">
         <label><input type="checkbox" value="Medicine" onchange="filterList()"> Medicine</label>
         <label><input type="checkbox" value="OT" onchange="filterList()"> OT</label>
         <label><input type="checkbox" value="Dialysis" onchange="filterList()"> Dialysis</label>
         <label><input type="checkbox" value="Chemo" onchange="filterList()"> Chemo</label>
       </div>
-      <br><button class="btn-secondary" onclick="clearFilters()">Clear Filters</button>
+      <button class="btn-secondary" style="margin-top:14px;" onclick="clearFilters()">Clear Filters</button>
     </div>
 
     <div id="addForm" style="display:none;">
@@ -632,6 +656,10 @@
 
       const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
       const selectedCategories = Array.from(document.querySelectorAll('#categoryCheckboxes input:checked')).map(cb => cb.value);
+
+      const activeCount = selectedWards.length + selectedCategories.length;
+      const badge = document.getElementById('filterCountBadge');
+      if (badge) badge.innerText = activeCount > 0 ? '(' + activeCount + ')' : '';
 
       const filtered = allPatients.filter(p => {
         const matchesSearch = p.name.toLowerCase().includes(query) || p.mrd.toLowerCase().includes(query);
