@@ -606,8 +606,18 @@
     async function downloadSignedUrl(path, photoType, uploadedAt) {
       const dt = parseUTC(uploadedAt);
       const dayNum = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric' });
-      const patientName = document.getElementById('patientName').innerText.trim();
-      const fileName = (patientName + ' ' + photoType + ' ' + dayNum)
+
+      // Friendly names for download files (no patient name)
+      let displayType = photoType;
+      if (photoType === "Patient Photo") {
+        displayType = "GEO PATIENT TAG PHOTO";
+      } else if (photoType === "IPD Chart") {
+        displayType = "CLINICAL NOTE";
+      } else if (photoType === "Drug Chart") {
+        displayType = "MEDICINE CARD";
+      }
+
+      const fileName = (displayType + ' ' + dayNum)
         .replace(/[\\/:*?"<>|]/g, '')
         .trim() + '.pdf';
 
