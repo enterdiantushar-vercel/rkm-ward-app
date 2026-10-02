@@ -69,6 +69,16 @@
             align-items: center;
             margin-bottom: 14px;
         }
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            margin: 18px 0 8px;
+        }
+        .section-title.due-now { color: var(--danger); }
+        .section-title.due-later { color: #B8860B; }
         .patient-card {
             background: var(--card-bg);
             border-radius: 10px;
@@ -85,6 +95,9 @@
         .patient-name a:hover { color: var(--teal-active); }
         .patient-meta { font-size: 13px; color: var(--text-secondary); margin: 4px 0; }
         .status-badge { font-size: 13px; font-weight: 600; margin: 6px 0; }
+        .due-line { font-size: 14px; font-weight: 700; margin: 6px 0; }
+        .due-line.red { color: var(--danger); }
+        .due-line.amber { color: #B8860B; }
         .missing-photos { font-size: 13px; margin: 6px 0; font-weight: 600; }
         .missing-photos.has-missing { color: #B8860B; }
         .missing-photos.all-done { color: var(--success); }
@@ -124,6 +137,12 @@
             margin-top: 4px;
         }
         .backdate-status { font-size: 12px; margin-top: 6px; }
+        details > summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--teal-active);
+            padding: 8px 0;
+        }
     </style>
 </head>
 <body>
@@ -152,6 +171,7 @@
 
         let currentUserEmail = "";
         let inactivityTimer;
+        let autoRefreshTimer;
         let lastResults = [];
 
         function parseUTC(dateStr) {
@@ -168,6 +188,24 @@
 
         function esc(s) {
             return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+
+        function istDateStr(d) {
+            return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+        }
+        function istTime(d) {
+            return d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
+        }
+        function istDateShort(d) {
+            return d.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' });
+        }
+        function formatDuration(ms) {
+            const totalMin = Math.max(0, Math.round(ms / 60000));
+            const h = Math.floor(totalMin / 60);
+            const m = totalMin % 60;
+            if (h <= 0) return m + "m";
+            if (m === 0) return h + "h";
+            return h + "h " + m + "m";
         }
 
         function startInactivityTimer() {
@@ -197,6 +235,14 @@
             currentUserEmail = sessionData.session.user.email;
             startInactivityTimer();
             loadTracker();
+
+            // Auto-refresh every 5 minutes so a "due later today" countdown
+            // automatically moves into "Due Now" once its time arrives,
+            // without needing a manual reload.
+            clearInterval(autoRefreshTimer);
+            autoRefreshTimer = setInterval(() => {
+                if (document.visibilityState === 'visible') loadTracker();
+            }, 5 * 60 * 1000);
         }
 
         async function loadTracker() {
@@ -214,7 +260,7 @@
 
             const activeMrds = patients.map(p => p.mrd);
             if (activeMrds.length === 0) {
-                document.getElementById('summary').innerText = "0 of 0 medicine patients need enhancement now.";
+                document.getElementById('summary').innerText = "No active medicine patients.";
                 document.getElementById('list').innerHTML = "<p>No active medicine patients.</p>";
                 lastResults = [];
                 return;
@@ -234,7 +280,7 @@
 
             // Today's photos only, scoped to active Medicine patients and today's date,
             // used purely to work out which of the 4 required slots are still missing.
-            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            const todayStr = istDateStr(new Date());
             const { data: todaysPhotos } = await supabaseClient
                 .from('daily_photos')
                 .select('mrd, photo_type')
@@ -260,6 +306,7 @@
             });
 
             const now = new Date();
+
             const results = patients.map(p => {
                 const patientLogs = (logs || []).filter(l => l.mrd === p.mrd);
                 const lastLog = patientLogs.length > 0 ? patientLogs[patientLogs.length - 1] : null;
@@ -272,49 +319,79 @@
                 if (dischargeMap[p.mrd]) {
                     const dt = parseUTC(dischargeMap[p.mrd]);
                     return {
-                        patient: p, status: "dischargePending", totalEnhancements,
+                        patient: p, status: "dischargePending", subLabel: "Discharge photo captured",
+                        totalEnhancements,
                         lastText: "Discharge photo captured on " + dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }),
-                        nextDueText: "",
-                        patientLogs,
-                        lastDateForCsv,
-                        missingToday
+                        dueText: "Not needed", nextDueMs: Infinity,
+                        patientLogs, lastDateForCsv, missingToday
                     };
                 }
 
-                let status, nextDueText, lastText;
                 if (!lastLog) {
-                    status = "never";
-                    lastText = "Never enhanced";
-                    nextDueText = "Due now";
-                } else {
-                    const lastTime = parseUTC(lastLog.marked_at);
-                    const nextDue = new Date(lastTime.getTime() + 48 * 60 * 60 * 1000);
-                    lastText = "Last: " + lastTime.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) + " by " + lastLog.marked_by;
-                    nextDueText = "Next due: " + nextDue.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' });
-                    status = nextDue <= now ? "overdue" : "ok";
+                    return {
+                        patient: p, status: "dueNow", subLabel: "Never enhanced",
+                        totalEnhancements,
+                        lastText: "Never enhanced",
+                        dueText: "Due now (never enhanced)", nextDueMs: -Infinity,
+                        patientLogs, lastDateForCsv, missingToday
+                    };
                 }
-                return { patient: p, status, lastText, nextDueText, totalEnhancements, patientLogs, lastDateForCsv, missingToday };
+
+                const lastTime = parseUTC(lastLog.marked_at);
+                const nextDue = new Date(lastTime.getTime() + 48 * 60 * 60 * 1000);
+                const lastText = "Last: " + lastTime.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) + " by " + lastLog.marked_by;
+
+                if (nextDue <= now) {
+                    const overdueBy = formatDuration(now - nextDue);
+                    return {
+                        patient: p, status: "dueNow", subLabel: "Overdue",
+                        totalEnhancements, lastText,
+                        dueText: "Overdue by " + overdueBy + " (was due " + istTime(nextDue) + ", " + istDateShort(nextDue) + ")",
+                        nextDueMs: nextDue.getTime(),
+                        patientLogs, lastDateForCsv, missingToday
+                    };
+                }
+
+                if (istDateStr(nextDue) === todayStr) {
+                    const inText = formatDuration(nextDue - now);
+                    return {
+                        patient: p, status: "dueLaterToday", subLabel: "Due Later Today",
+                        totalEnhancements, lastText,
+                        dueText: "Due in " + inText + " (at " + istTime(nextDue) + ")",
+                        nextDueMs: nextDue.getTime(),
+                        patientLogs, lastDateForCsv, missingToday
+                    };
+                }
+
+                return {
+                    patient: p, status: "notToday", subLabel: "Not due today",
+                    totalEnhancements, lastText,
+                    dueText: "Due " + istDateShort(nextDue) + " at " + istTime(nextDue),
+                    nextDueMs: nextDue.getTime(),
+                    patientLogs, lastDateForCsv, missingToday
+                };
             });
 
-            const order = { never: 0, overdue: 1, ok: 2, dischargePending: 3 };
-            results.sort((a, b) => order[a.status] - order[b.status]);
+            const dueNow = results.filter(r => r.status === "dueNow")
+                .sort((a, b) => a.nextDueMs - b.nextDueMs);
+            const dueLaterToday = results.filter(r => r.status === "dueLaterToday")
+                .sort((a, b) => a.nextDueMs - b.nextDueMs);
+            const notToday = results.filter(r => r.status === "notToday")
+                .sort((a, b) => a.nextDueMs - b.nextDueMs);
+            const dischargePending = results.filter(r => r.status === "dischargePending");
 
-            // Save results globally for CSV export functionality
             lastResults = results;
 
-            const overdueCount = results.filter(r => r.status !== "ok" && r.status !== "dischargePending").length;
             document.getElementById('summary').innerText =
-                `${overdueCount} of ${results.length} medicine patients need enhancement now.`;
+                `${dueNow.length} due now, ${dueLaterToday.length} due later today, ${results.length} active medicine patients.`;
 
-            document.getElementById('list').innerHTML = results.map(r => {
+            function cardHtml(r) {
                 const p = r.patient;
-                const badgeText = r.status === "ok" ? "Up to date"
-                    : r.status === "dischargePending" ? "Discharge photo captured"
-                    : r.status === "never" ? "Never enhanced" : "Overdue";
-                const cardClass = r.status === "dischargePending" ? "ok" : r.status;
-                const buttonHtml = (r.status === "ok" || r.status === "dischargePending")
-                    ? `<button disabled style="background:#B0BEC5; cursor:not-allowed;">${r.status === "dischargePending" ? "No longer needed" : "Not due yet"}</button>`
-                    : `<button onclick="markEnhanced('${p.mrd}')">Mark Enhanced</button>`;
+                const cardClassMap = { dueNow: "overdue", dueLaterToday: "never", notToday: "ok", dischargePending: "ok" };
+                const dueLineClassMap = { dueNow: "red", dueLaterToday: "amber", notToday: "", dischargePending: "" };
+                const buttonHtml = (r.status === "dueNow")
+                    ? `<button onclick="markEnhanced('${p.mrd}')">Mark Enhanced</button>`
+                    : `<button disabled style="background:#B0BEC5; cursor:not-allowed;">${r.status === "dischargePending" ? "No longer needed" : "Not due yet"}</button>`;
 
                 const missingHtml = r.missingToday.length === 0
                     ? `<div class="missing-photos all-done">&#10003; All captured today</div>`
@@ -322,13 +399,13 @@
 
                 const safeMrdAttr = esc(p.mrd);
                 return `
-                    <div class="patient-card ${cardClass}">
+                    <div class="patient-card ${cardClassMap[r.status]}">
                         <div class="patient-name"><a href="patient.html?mrd=${encodeURIComponent(p.mrd)}">${esc(p.name)}</a> (MRD: ${esc(p.mrd)})</div>
                         <div class="patient-meta">Ward: ${esc(p.ward)} | ${esc(p.patient_category || "-")}</div>
-                        <div class="status-badge">${badgeText}</div>
+                        <div class="status-badge">${esc(r.subLabel)}</div>
+                        <div class="due-line ${dueLineClassMap[r.status]}">${esc(r.dueText)}</div>
                         ${missingHtml}
-                        <div class="patient-meta">${r.lastText}</div>
-                        <div class="patient-meta">${r.nextDueText}</div>
+                        <div class="patient-meta">${esc(r.lastText)}</div>
                         <div class="patient-meta">Total times enhancement marked: ${r.totalEnhancements}</div>
                         ${buttonHtml}
                         <button class="btn-secondary" style="margin-top:6px;" onclick="toggleBackdateForm('${safeMrdAttr}')">+ Add Missed Enhancement</button>
@@ -343,7 +420,23 @@
                         </div>
                     </div>
                 `;
-            }).join('');
+            }
+
+            let html = "";
+
+            html += `<div class="section-title due-now">Due Now (${dueNow.length})</div>`;
+            html += dueNow.length ? dueNow.map(cardHtml).join('') : `<p class="patient-meta">Nothing due right now.</p>`;
+
+            html += `<div class="section-title due-later">Due Later Today (${dueLaterToday.length})</div>`;
+            html += dueLaterToday.length ? dueLaterToday.map(cardHtml).join('') : `<p class="patient-meta">Nothing else due today.</p>`;
+
+            const tucked = notToday.concat(dischargePending);
+            if (tucked.length > 0) {
+                html += `<details style="margin-top:14px;"><summary>Not needed today (${tucked.length})</summary>` +
+                    `<div style="margin-top:10px;">` + tucked.map(cardHtml).join('') + `</div></details>`;
+            }
+
+            document.getElementById('list').innerHTML = html;
         }
 
         async function markEnhanced(mrd) {
@@ -420,11 +513,10 @@
                 return;
             }
 
-            // Filter to include ONLY pending/non-enhanced patients (overdue or never enhanced)
-            const pendingResults = lastResults.filter(r => r.status === "never" || r.status === "overdue");
+            const pendingResults = lastResults.filter(r => r.status === "dueNow");
 
             if (pendingResults.length === 0) {
-                alert("No pending/overdue patients to download.");
+                alert("No pending patients to download.");
                 return;
             }
 
@@ -463,7 +555,7 @@
                     p.bed_no || "",
                     p.mrd || "",
                     p.name || "",
-                    r.status === "never" ? "Never enhanced" : "Overdue",
+                    r.subLabel,
                     (r.missingToday || []).join("; "),
                     r.totalEnhancements,
                     r.lastDateForCsv || "",
