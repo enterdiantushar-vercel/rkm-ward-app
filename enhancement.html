@@ -513,63 +513,47 @@
                 return;
             }
 
-            const pendingResults = lastResults.filter(r => r.status === "dueNow");
+            const dueNowList = lastResults.filter(r => r.status === "dueNow");
+            const dueLaterList = lastResults.filter(r => r.status === "dueLaterToday");
 
-            if (pendingResults.length === 0) {
-                alert("No pending patients to download.");
+            if (dueNowList.length === 0 && dueLaterList.length === 0) {
+                alert("No patients due today.");
                 return;
             }
 
-            const sorted = [...pendingResults].sort((a, b) => {
+            const byWardThenName = (a, b) => {
                 const w = (a.patient.ward || "").localeCompare(b.patient.ward || "");
                 if (w !== 0) return w;
                 return (a.patient.name || "").localeCompare(b.patient.name || "");
-            });
+            };
 
-            const header = [
-                "Ward",
-                "Bed",
-                "MRD",
-                "Name",
-                "Status",
-                "Missing Today",
-                "Total Enhancements",
-                "Last Enhancement Date",
-                "Last Marked By",
-                "Full History (date — who)"
-            ];
+            const header = ["Ward", "Bed", "MRD", "Name", "Due"];
 
-            const rows = sorted.map(r => {
+            function toRow(r) {
                 const p = r.patient;
-                const lastBy = r.patientLogs.length > 0
-                    ? (r.patientLogs[r.patientLogs.length - 1].marked_by || "")
-                    : "";
-                const fullHistory = r.patientLogs
-                    .slice()
-                    .reverse()
-                    .map(l => formatDateTime(l.marked_at) + " — " + (l.marked_by || "unknown"))
-                    .join(" | ");
-
                 return [
                     p.ward || "",
                     p.bed_no || "",
                     p.mrd || "",
                     p.name || "",
-                    r.subLabel,
-                    (r.missingToday || []).join("; "),
-                    r.totalEnhancements,
-                    r.lastDateForCsv || "",
-                    lastBy,
-                    fullHistory
+                    r.dueText
                 ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",");
-            });
+            }
 
-            const csv = [header.join(","), ...rows].join("\n");
+            const csvLines = [header.join(",")];
+
+            csvLines.push(`"DUE NOW (${dueNowList.length})",,,,`);
+            [...dueNowList].sort(byWardThenName).forEach(r => csvLines.push(toRow(r)));
+
+            csvLines.push(`"DUE LATER TODAY (${dueLaterList.length})",,,,`);
+            [...dueLaterList].sort(byWardThenName).forEach(r => csvLines.push(toRow(r)));
+
+            const csv = csvLines.join("\n");
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = "pending-enhancement-medicine-" + new Date().toISOString().slice(0,10) + ".csv";
+            a.download = "due-today-enhancement-medicine-" + new Date().toISOString().slice(0,10) + ".csv";
             a.click();
             URL.revokeObjectURL(url);
         }
