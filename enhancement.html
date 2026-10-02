@@ -332,32 +332,31 @@
                         patient: p, status: "dueNow", subLabel: "Never enhanced",
                         totalEnhancements,
                         lastText: "Never enhanced",
-                        dueText: "Due now (never enhanced)", nextDueMs: -Infinity,
+                        dueText: "Next due: Now (never enhanced before)", nextDueMs: -Infinity,
                         patientLogs, lastDateForCsv, missingToday
                     };
                 }
 
                 const lastTime = parseUTC(lastLog.marked_at);
                 const nextDue = new Date(lastTime.getTime() + 48 * 60 * 60 * 1000);
-                const lastText = "Last: " + lastTime.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) + " by " + lastLog.marked_by;
+                const lastText = "Last enhanced: " + lastTime.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) + " by " + lastLog.marked_by;
+                const nextDueText = istTime(nextDue) + ", " + istDateShort(nextDue);
 
                 if (nextDue <= now) {
-                    const overdueBy = formatDuration(now - nextDue);
                     return {
                         patient: p, status: "dueNow", subLabel: "Overdue",
                         totalEnhancements, lastText,
-                        dueText: "Overdue by " + overdueBy + " (was due " + istTime(nextDue) + ", " + istDateShort(nextDue) + ")",
+                        dueText: "Next due: " + nextDueText + " (overdue)",
                         nextDueMs: nextDue.getTime(),
                         patientLogs, lastDateForCsv, missingToday
                     };
                 }
 
                 if (istDateStr(nextDue) === todayStr) {
-                    const inText = formatDuration(nextDue - now);
                     return {
                         patient: p, status: "dueLaterToday", subLabel: "Due Later Today",
                         totalEnhancements, lastText,
-                        dueText: "Due in " + inText + " (at " + istTime(nextDue) + ")",
+                        dueText: "Next due: " + nextDueText,
                         nextDueMs: nextDue.getTime(),
                         patientLogs, lastDateForCsv, missingToday
                     };
@@ -366,7 +365,7 @@
                 return {
                     patient: p, status: "notToday", subLabel: "Not due today",
                     totalEnhancements, lastText,
-                    dueText: "Due " + istDateShort(nextDue) + " at " + istTime(nextDue),
+                    dueText: "Next due: " + nextDueText,
                     nextDueMs: nextDue.getTime(),
                     patientLogs, lastDateForCsv, missingToday
                 };
