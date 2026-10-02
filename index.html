@@ -252,6 +252,7 @@
         <button onclick="document.getElementById('filterPanel').style.display = document.getElementById('filterPanel').style.display === 'none' ? 'block' : 'none'">Filters <span id="filterCountBadge"></span></button>
         <button class="btn-secondary" onclick="clearFilters()">Clear</button>
         <button onclick="document.getElementById('addForm').style.display = document.getElementById('addForm').style.display === 'none' ? 'block' : 'none'">+ Add Patient</button>
+        <button class="btn-secondary" onclick="downloadActiveCsv()">Download Active List (Ward-wise)</button>
         <a href="enhancement.html"><button class="btn-secondary">Enhancement Tracker</button></a>
       </div>
 
@@ -631,6 +632,42 @@
       document.querySelectorAll('#wardCheckboxes input, #categoryCheckboxes input, #unitCheckboxes input').forEach(cb => cb.checked = false);
       syncChipHighlights();
       filterList();
+    }
+
+    function downloadActiveCsv() {
+      const active = allPatients.filter(p => !p.is_discharged);
+      if (active.length === 0) {
+        alert("No active patients to download.");
+        return;
+      }
+
+      // Sort ward-wise, then by name
+      const sorted = active.slice().sort((a, b) => {
+        const w = (a.ward || "").localeCompare(b.ward || "");
+        if (w !== 0) return w;
+        return (a.name || "").localeCompare(b.name || "");
+      });
+
+      const header = ["Ward", "Bed", "MRD", "Name", "PMJAY", "Doctor Unit", "Category", "Admission Date"];
+      const rows = sorted.map(p => [
+        p.ward || "",
+        p.bed_no || "",
+        p.mrd || "",
+        p.name || "",
+        p.pmjay_id || "",
+        p.doctor_unit || "",
+        p.patient_category || "",
+        p.admission_date || ""
+      ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","));
+
+      const csv = [header.join(",")].concat(rows).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "active-patients-wardwise-" + new Date().toISOString().slice(0,10) + ".csv";
+      a.click();
+      URL.revokeObjectURL(url);
     }
 
     // Check session on load
