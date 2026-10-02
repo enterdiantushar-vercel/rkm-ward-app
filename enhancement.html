@@ -81,8 +81,13 @@
         .patient-card.ok { border-left-color: var(--success); background: #F4FBF3; }
         .patient-card.never { border-left-color: var(--warning); background: #FFFCF2; }
         .patient-name { font-weight: 600; font-size: 15px; }
+        .patient-name a { color: var(--text-primary); text-decoration: none; border-bottom: 1px dashed var(--teal-active); }
+        .patient-name a:hover { color: var(--teal-active); }
         .patient-meta { font-size: 13px; color: var(--text-secondary); margin: 4px 0; }
         .status-badge { font-size: 13px; font-weight: 600; margin: 6px 0; }
+        .missing-photos { font-size: 13px; margin: 6px 0; font-weight: 600; }
+        .missing-photos.has-missing { color: #B8860B; }
+        .missing-photos.all-done { color: var(--success); }
         .history-list {
             font-size: 12px;
             color: var(--text-secondary);
@@ -91,6 +96,34 @@
             border-left: 2px solid var(--border-light);
         }
         .history-list div { margin: 2px 0; }
+        .btn-secondary {
+            background: var(--card-bg);
+            color: var(--teal-active);
+            border: 1.5px solid #B9E4E0;
+        }
+        .btn-secondary:hover { background: #E8F7F5; }
+        .backdate-box {
+            background: #FBFEFE;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            padding: 10px;
+            margin-top: 8px;
+        }
+        .backdate-box input[type="datetime-local"] {
+            width: 100%;
+            padding: 10px;
+            margin: 6px 0;
+            border: 1px solid #D3E7E5;
+            border-radius: 8px;
+            font-size: 15px;
+            background: #FFFFFF;
+        }
+        .backdate-box .row-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 4px;
+        }
+        .backdate-status { font-size: 12px; margin-top: 6px; }
     </style>
 </head>
 <body>
@@ -115,6 +148,8 @@
         const SUPABASE_KEY = "sb_publishable_PCV_XmzEIUoX08BCQqK9HA_0MZ4XI_H";
         const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+        const REQUIRED_SLOTS_MEDICINE = ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart"];
+
         let currentUserEmail = "";
         let inactivityTimer;
         let lastResults = [];
@@ -129,6 +164,10 @@
 
         function formatDateTime(dateStr) {
             return parseUTC(dateStr).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' });
+        }
+
+        function esc(s) {
+            return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
 
         function startInactivityTimer() {
@@ -193,6 +232,15 @@
                 .eq('photo_type', 'Discharge Photo')
                 .in('mrd', activeMrds);
 
+            // Today's photos only, scoped to active Medicine patients and today's date,
+            // used purely to work out which of the 4 required slots are still missing.
+            const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            const { data: todaysPhotos } = await supabaseClient
+                .from('daily_photos')
+                .select('mrd, photo_type')
+                .in('mrd', activeMrds)
+                .eq('photo_date', todayStr);
+
             if (lErr) {
                 document.getElementById('list').innerText = "Error loading tracker logs.";
                 return;
@@ -205,12 +253,21 @@
                 }
             });
 
+            const capturedTodayByMrd = {};
+            (todaysPhotos || []).forEach(ph => {
+                if (!capturedTodayByMrd[ph.mrd]) capturedTodayByMrd[ph.mrd] = new Set();
+                capturedTodayByMrd[ph.mrd].add(ph.photo_type);
+            });
+
             const now = new Date();
             const results = patients.map(p => {
                 const patientLogs = (logs || []).filter(l => l.mrd === p.mrd);
                 const lastLog = patientLogs.length > 0 ? patientLogs[patientLogs.length - 1] : null;
                 const totalEnhancements = patientLogs.length;
                 const lastDateForCsv = lastLog ? formatDateTime(lastLog.marked_at) : "";
+
+                const capturedToday = capturedTodayByMrd[p.mrd] || new Set();
+                const missingToday = REQUIRED_SLOTS_MEDICINE.filter(slot => !capturedToday.has(slot));
 
                 if (dischargeMap[p.mrd]) {
                     const dt = parseUTC(dischargeMap[p.mrd]);
@@ -219,7 +276,8 @@
                         lastText: "Discharge photo captured on " + dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }),
                         nextDueText: "",
                         patientLogs,
-                        lastDateForCsv
+                        lastDateForCsv,
+                        missingToday
                     };
                 }
 
@@ -235,7 +293,7 @@
                     nextDueText = "Next due: " + nextDue.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' });
                     status = nextDue <= now ? "overdue" : "ok";
                 }
-                return { patient: p, status, lastText, nextDueText, totalEnhancements, patientLogs, lastDateForCsv };
+                return { patient: p, status, lastText, nextDueText, totalEnhancements, patientLogs, lastDateForCsv, missingToday };
             });
 
             const order = { never: 0, overdue: 1, ok: 2, dischargePending: 3 };
@@ -257,15 +315,32 @@
                 const buttonHtml = (r.status === "ok" || r.status === "dischargePending")
                     ? `<button disabled style="background:#B0BEC5; cursor:not-allowed;">${r.status === "dischargePending" ? "No longer needed" : "Not due yet"}</button>`
                     : `<button onclick="markEnhanced('${p.mrd}')">Mark Enhanced</button>`;
+
+                const missingHtml = r.missingToday.length === 0
+                    ? `<div class="missing-photos all-done">&#10003; All captured today</div>`
+                    : `<div class="missing-photos has-missing">Missing today: ${r.missingToday.join(", ")}</div>`;
+
+                const safeMrdAttr = esc(p.mrd);
                 return `
                     <div class="patient-card ${cardClass}">
-                        <div class="patient-name">${p.name} (MRD: ${p.mrd})</div>
-                        <div class="patient-meta">Ward: ${p.ward} | ${p.patient_category || "-"}</div>
+                        <div class="patient-name"><a href="patient.html?mrd=${encodeURIComponent(p.mrd)}">${esc(p.name)}</a> (MRD: ${esc(p.mrd)})</div>
+                        <div class="patient-meta">Ward: ${esc(p.ward)} | ${esc(p.patient_category || "-")}</div>
                         <div class="status-badge">${badgeText}</div>
+                        ${missingHtml}
                         <div class="patient-meta">${r.lastText}</div>
                         <div class="patient-meta">${r.nextDueText}</div>
                         <div class="patient-meta">Total times enhancement marked: ${r.totalEnhancements}</div>
                         ${buttonHtml}
+                        <button class="btn-secondary" style="margin-top:6px;" onclick="toggleBackdateForm('${safeMrdAttr}')">+ Add Missed Enhancement</button>
+                        <div id="backdateBox_${safeMrdAttr}" class="backdate-box" style="display:none;">
+                            <label style="font-size:13px; color:var(--text-secondary);">When was it actually done?</label>
+                            <input type="datetime-local" id="backdateInput_${safeMrdAttr}">
+                            <div class="row-buttons">
+                                <button onclick="submitBackdate('${safeMrdAttr}')">Save</button>
+                                <button class="btn-secondary" onclick="toggleBackdateForm('${safeMrdAttr}')">Cancel</button>
+                            </div>
+                            <div id="backdateStatus_${safeMrdAttr}" class="backdate-status"></div>
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -280,6 +355,62 @@
                 alert("Error: " + error.message);
                 return;
             }
+            loadTracker();
+        }
+
+        function localDateTimeNowValue() {
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+                   'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+        }
+
+        function toggleBackdateForm(mrd) {
+            const box = document.getElementById('backdateBox_' + mrd);
+            if (!box) return;
+            const opening = box.style.display === "none";
+            box.style.display = opening ? "block" : "none";
+            if (opening) {
+                const input = document.getElementById('backdateInput_' + mrd);
+                input.max = localDateTimeNowValue();
+                input.value = localDateTimeNowValue();
+                document.getElementById('backdateStatus_' + mrd).innerText = "";
+            }
+        }
+
+        async function submitBackdate(mrd) {
+            const input = document.getElementById('backdateInput_' + mrd);
+            const status = document.getElementById('backdateStatus_' + mrd);
+            const val = input.value;
+
+            if (!val) {
+                status.innerText = "Pick a date and time first.";
+                return;
+            }
+
+            const chosen = new Date(val);
+            if (isNaN(chosen.getTime())) {
+                status.innerText = "That date/time doesn't look valid.";
+                return;
+            }
+            if (chosen.getTime() > Date.now()) {
+                status.innerText = "This can't be in the future.";
+                return;
+            }
+
+            const { error } = await supabaseClient
+                .from('enhancement_log')
+                .insert([{
+                    mrd: mrd,
+                    marked_by: currentUserEmail + " (backdated)",
+                    marked_at: chosen.toISOString()
+                }]);
+
+            if (error) {
+                status.innerText = "Error: " + error.message;
+                return;
+            }
+
             loadTracker();
         }
 
@@ -309,6 +440,7 @@
                 "MRD",
                 "Name",
                 "Status",
+                "Missing Today",
                 "Total Enhancements",
                 "Last Enhancement Date",
                 "Last Marked By",
@@ -332,6 +464,7 @@
                     p.mrd || "",
                     p.name || "",
                     r.status === "never" ? "Never enhanced" : "Overdue",
+                    (r.missingToday || []).join("; "),
                     r.totalEnhancements,
                     r.lastDateForCsv || "",
                     lastBy,
