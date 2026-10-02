@@ -231,7 +231,7 @@
   <div class="container">
     <div class="discharge-section" style="border-left-color: var(--teal-active); margin-top:0; margin-bottom:16px;">
       <div id="losBanner"></div>
-      <button type="button" class="btn-toggle" onclick="toggleEditBox()" style="background:#fff; color:#26A69A; border:1.5px solid #B9E4E0; margin:0;">Edit Ward / Bed / LOS &#9662;</button>
+      <button type="button" class="btn-toggle" onclick="toggleEditBox()" style="background:#fff; color:#26A69A; border:1.5px solid #B9E4E0; margin:0;">Edit Ward / Bed / Unit / LOS &#9662;</button>
       <div id="editBox" style="display:none;">
       <select id="editWard" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
         <option value="">Not assigned yet</option>
@@ -243,6 +243,15 @@
         <option>ICU</option><option>HDUII</option>
       </select>
       <input type="text" id="editBed" placeholder="Bed No." style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+      <select id="editDoctorUnit" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
+        <option value="">Doctor Unit (optional)</option>
+        <option value="UNIT1">UNIT1 - DR. PRADEEP CHAKRABORTY / DR. SUJATA MAZUMDER</option>
+        <option value="UNIT2">UNIT2 - DR. SUJOY ROYCHOWDHURY / DR. PRABUDDHA MUKHOPADHYAY</option>
+        <option value="UNIT3">UNIT3 - DR. BISWANATH PATRA / DR. SANDIPAN MUKHERJEE</option>
+        <option value="UNIT4">UNIT4 - DR. AMITAVA MAZUMDER / DR. UJWAL CHAKRABORTY</option>
+        <option value="UNIT5">UNIT5 - DR. TANMOY CHATTERJEE / DR. SHYAMOSHREE MONDAL</option>
+        <option value="UNIT6">UNIT6 - DR. TAPAS LAHA / DR. BARUN GHORU</option>
+      </select>
       <div id="editLosWrap">
         <input type="text" id="editLosSearch" list="editLosOptions" placeholder="Search code or procedure name (optional)" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
         <datalist id="editLosOptions"></datalist>
@@ -399,7 +408,7 @@
 
       document.getElementById('patientName').innerText = patient.name;
       document.getElementById('patientInfo').innerText =
-       `MRD: ${patient.mrd} | PMJAY: ${patient.pmjay_id || "-"} | Ward: ${patient.ward} | Bed: ${patient.bed_no} | Category: ${patient.patient_category}`;
+       `MRD: ${patient.mrd} | PMJAY: ${patient.pmjay_id || "-"} | Ward: ${patient.ward || "-"} | Bed: ${patient.bed_no || "-"} | Unit: ${patient.doctor_unit || "-"} | Category: ${patient.patient_category}`;
       patientCategory = patient.patient_category;
       currentPatient = patient;
       fillEditFields();
@@ -612,7 +621,7 @@
       // Friendly names for download files (no patient name)
       let displayType = photoType;
       if (photoType === "Patient Photo") {
-        displayType = "GEO TAG PATIENT PHOTO";
+        displayType = "GEO PATIENT TAG PHOTO";
       } else if (photoType === "IPD Chart") {
         displayType = "CLINICAL NOTE";
       } else if (photoType === "Drug Chart") {
@@ -1068,6 +1077,7 @@ let currentPatient = null;
       loadCategoryHistory();
       document.getElementById('editWard').value = p.ward || "";
       document.getElementById('editBed').value = p.bed_no || "";
+      document.getElementById('editDoctorUnit').value = p.doctor_unit || "";
       if (p.patient_category === "Medicine") {
         document.getElementById('editLosWrap').style.display = "none";
       } else {
@@ -1098,11 +1108,12 @@ let currentPatient = null;
       const p = currentPatient;
       const newWard = document.getElementById('editWard').value;
       const newBed = document.getElementById('editBed').value.trim();
+      const newUnit = document.getElementById('editDoctorUnit').value;
       const losRaw = document.getElementById('editLos').value;
       const newLos = (p.patient_category !== "Medicine" && losRaw) ? parseInt(losRaw) : null;
       const status = document.getElementById('editStatus');
 
-      const update = { ward: newWard, bed_no: newBed };
+      const update = { ward: newWard, bed_no: newBed, doctor_unit: newUnit || null };
       if (p.patient_category !== "Medicine") update.los_days = newLos;
 
       const { error } = await supabaseClient.from('Patients').update(update).eq('mrd', mrd);
@@ -1119,10 +1130,10 @@ let currentPatient = null;
         if (hErr) { status.innerText = "Saved, but history failed: " + hErr.message; return; }
       }
 
-      p.ward = newWard; p.bed_no = newBed;
+      p.ward = newWard; p.bed_no = newBed; p.doctor_unit = newUnit;
       if (p.patient_category !== "Medicine") p.los_days = newLos;
       document.getElementById('patientInfo').innerText =
-        `MRD: ${p.mrd} | Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | Category: ${p.patient_category}`;
+        `MRD: ${p.mrd} | Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | Unit: ${p.doctor_unit || "-"} | Category: ${p.patient_category}`;
       status.innerText = "Saved.";
       showLosBanner();
       loadWardHistory();
@@ -1198,7 +1209,7 @@ let currentPatient = null;
 
       p.pmjay_id = newPmjay;
       document.getElementById('patientInfo').innerText =
-        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id} | Ward: ${p.ward} | Bed: ${p.bed_no} | Category: ${p.patient_category}`;
+        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id} | Ward: ${p.ward} | Bed: ${p.bed_no} | Unit: ${p.doctor_unit || "-"} | Category: ${p.patient_category}`;
       status.innerText = "Saved.";
       document.getElementById('addPmjayBox').style.display = "none";
     }
@@ -1225,7 +1236,7 @@ let currentPatient = null;
       p.pmjay_id = newPmjay;
       document.getElementById('patientName').innerText = newName;
       document.getElementById('patientInfo').innerText =
-        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id || "-"} | Ward: ${p.ward} | Bed: ${p.bed_no} | Category: ${p.patient_category}`;
+        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id || "-"} | Ward: ${p.ward} | Bed: ${p.bed_no} | Unit: ${p.doctor_unit || "-"} | Category: ${p.patient_category}`;
       status.innerText = "Saved.";
     }
 
