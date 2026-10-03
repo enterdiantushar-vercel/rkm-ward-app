@@ -215,6 +215,7 @@
   <div class="spinner"></div>
   <div id="loadingText">Processing...</div>
 </div>
+  <div id="offlineQueueBanner" style="display:none; position:sticky; top:0; background:#FFA000; color:white; padding:10px 16px; z-index:950; text-align:center; font-size:13px; font-weight:600;"></div>
   <div class="header">
     <div class="header-left">
       <div class="header-brand">
@@ -419,6 +420,12 @@
 
       renderSlots();
       loadAllPhotos();
+      updateOfflineBanner();
+      renderOfflinePendingForSlots();
+      flushOfflineQueue();
+
+      window.addEventListener('online', flushOfflineQueue);
+      setInterval(flushOfflineQueue, 30000);
     }
 
     function renderSlots() {
@@ -705,38 +712,206 @@
       updatePendingBar();
     }
 
+    // --- Offline queue: staff can keep capturing with no signal. The file is
+    // saved on the phone itself and uploaded automatically once back online,
+    // the same way a chat app queues an unsent message. ---
+    const OFFLINE_DB_NAME = 'rkm_offline_queue';
+    const OFFLINE_STORE = 'pending_uploads';
+    let lastUploadQueued = false;
+
+    function openOfflineDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(OFFLINE_DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          req.result.createObjectStore(OFFLINE_STORE, { keyPath: 'id', autoIncrement: true });
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function queueAdd(record) {
+      const db = await openOfflineDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE, 'readwrite');
+        const req = tx.objectStore(OFFLINE_STORE).add(record);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function queueGetAll() {
+      const db = await openOfflineDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE, 'readonly');
+        const req = tx.objectStore(OFFLINE_STORE).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function queueDelete(id) {
+      const db = await openOfflineDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(OFFLINE_STORE, 'readwrite');
+        const req = tx.objectStore(OFFLINE_STORE).delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function looksLikeNetworkFailure(err) {
+      if (!navigator.onLine) return true;
+      const msg = (err && err.message) ? err.message : String(err || "");
+      return /network|failed to fetch|load failed|timeout/i.test(msg);
+    }
+
+    async function queueForOfflineUpload(pdfBlob, slotType, geoStoreText) {
+      await queueAdd({
+        mrd, slotType, photoDate: today,
+        geoStoreText: geoStoreText || "",
+        uploadedBy: currentUserEmail,
+        blob: pdfBlob,
+        createdAt: new Date().toISOString()
+      });
+      lastUploadQueued = true;
+      hideOverlay();
+      await updateOfflineBanner();
+      await renderOfflinePendingForSlots();
+    }
+
     async function uploadPdf(pdfBlob, slotType, geoStoreText) {
-      const filePath = `${mrd}/${today}/${slotType}-${Date.now()}.pdf`;
-      const { error: uploadError } = await supabaseClient.storage
-        .from('patient-photos')
-        .upload(filePath, pdfBlob);
+      lastUploadQueued = false;
+      try {
+        const filePath = `${mrd}/${today}/${slotType}-${Date.now()}.pdf`;
+        const { error: uploadError } = await supabaseClient.storage
+          .from('patient-photos')
+          .upload(filePath, pdfBlob);
 
-      if (uploadError) {
+        if (uploadError) {
+          if (looksLikeNetworkFailure(uploadError)) {
+            await queueForOfflineUpload(pdfBlob, slotType, geoStoreText);
+            return true;
+          }
+          hideOverlay();
+          alert("Upload failed: " + uploadError.message);
+          return false;
+        }
+
+        const { error: insertError } = await supabaseClient
+          .from('daily_photos')
+          .insert([{
+            mrd: mrd,
+            photo_date: today,
+            photo_type: slotType,
+            photo_url: filePath,
+            file_type: "pdf",
+            geo_location: geoStoreText,
+            uploaded_by: currentUserEmail
+          }]);
+
+        if (insertError) {
+          if (looksLikeNetworkFailure(insertError)) {
+            await queueForOfflineUpload(pdfBlob, slotType, geoStoreText);
+            return true;
+          }
+          hideOverlay();
+          alert("Save failed: " + insertError.message);
+          return false;
+        }
+
+        await loadAllPhotos();
+        return true;
+      } catch (err) {
+        if (looksLikeNetworkFailure(err)) {
+          await queueForOfflineUpload(pdfBlob, slotType, geoStoreText);
+          return true;
+        }
         hideOverlay();
-        alert("Upload failed: " + uploadError.message);
+        alert("An error occurred: " + err.message);
         return false;
       }
+    }
 
-      const { error: insertError } = await supabaseClient
-        .from('daily_photos')
-        .insert([{
-          mrd: mrd,
-          photo_date: today,
-          photo_type: slotType,
-          photo_url: filePath,
-          file_type: "pdf",
-          geo_location: geoStoreText,
-          uploaded_by: currentUserEmail
-        }]);
-
-      if (insertError) {
-        hideOverlay();
-        alert("Save failed: " + insertError.message);
-        return false;
+    let isFlushingQueue = false;
+    async function flushOfflineQueue() {
+      if (isFlushingQueue || !navigator.onLine) return;
+      isFlushingQueue = true;
+      try {
+        const items = await queueGetAll();
+        for (const item of items) {
+          const filePath = `${item.mrd}/${item.photoDate}/${item.slotType}-${Date.now()}.pdf`;
+          const { error: uploadError } = await supabaseClient.storage
+            .from('patient-photos')
+            .upload(filePath, item.blob);
+          if (uploadError) {
+            if (looksLikeNetworkFailure(uploadError)) break;
+            continue;
+          }
+          const { error: insertError } = await supabaseClient
+            .from('daily_photos')
+            .insert([{
+              mrd: item.mrd,
+              photo_date: item.photoDate,
+              photo_type: item.slotType,
+              photo_url: filePath,
+              file_type: "pdf",
+              geo_location: item.geoStoreText,
+              uploaded_by: item.uploadedBy
+            }]);
+          if (insertError) {
+            if (looksLikeNetworkFailure(insertError)) break;
+            continue;
+          }
+          await queueDelete(item.id);
+        }
+      } catch (e) {
+        // likely dropped mid-flush; stop quietly and retry on the next pass
+      } finally {
+        isFlushingQueue = false;
+        await updateOfflineBanner();
+        await renderOfflinePendingForSlots();
+        await loadAllPhotos();
       }
+    }
 
-      await loadAllPhotos();
-      return true;
+    async function updateOfflineBanner() {
+      const items = await queueGetAll().catch(() => []);
+      const mine = items.filter(it => it.mrd === mrd);
+      const banner = document.getElementById('offlineQueueBanner');
+      if (!banner) return;
+      if (mine.length === 0) {
+        banner.style.display = 'none';
+        return;
+      }
+      banner.style.display = 'block';
+      banner.innerHTML = mine.length + ' capture(s) on this patient saved offline, waiting to upload. ' +
+        '<button onclick="flushOfflineQueue()" style="margin-left:6px; padding:6px 10px; font-size:12px; min-height:auto;">Retry now</button>';
+    }
+
+    async function renderOfflinePendingForSlots() {
+      const items = await queueGetAll().catch(() => []);
+      const mine = items.filter(it => it.mrd === mrd);
+      document.querySelectorAll('.offline-pending-note').forEach(el => el.remove());
+      const grouped = {};
+      mine.forEach(it => {
+        if (!grouped[it.slotType]) grouped[it.slotType] = [];
+        grouped[it.slotType].push(it);
+      });
+      Object.keys(grouped).forEach(slotType => {
+        const target = slotType === 'Discharge Photo'
+          ? document.getElementById('dischargeStatus')
+          : document.getElementById('status-' + slotType);
+        if (!target) return;
+        const html = grouped[slotType].map(it => {
+          const url = URL.createObjectURL(it.blob);
+          const dt = new Date(it.createdAt);
+          return '<div class="offline-pending-note" style="margin-top:6px; padding:6px; background:#FFF3E0; border-radius:6px; font-size:12px;">' +
+            '&#9203; Captured ' + dt.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) +
+            ' &mdash; waiting to upload (saved on this phone). <a href="' + url + '" target="_blank">View</a></div>';
+        }).join('');
+        target.insertAdjacentHTML('beforeend', html);
+      });
     }
 
     async function captureGeotagged(file, slotType) {
@@ -753,7 +928,11 @@
         showMsg("Uploading, please wait...");
         const ok = await uploadPdf(pdfBlob, slotType, loc.text);
         hideOverlay();
-        if (ok) alert(slotType + " saved successfully!");
+        if (ok) {
+          alert(lastUploadQueued
+            ? slotType + " could not reach the server. Saved on this phone — it will upload automatically once you're back online."
+            : slotType + " saved successfully!");
+        }
       } catch (err) {
         hideOverlay();
         alert("An error occurred: " + err.message);
@@ -832,8 +1011,13 @@
         if (ok) {
           pendingFiles = [];
           updatePendingBar();
-          let msg = slot + " saved: " + files.length + " page(s), " + Math.round(result.blob.size / 1024) + " KB.";
-          if (!result.ok) msg += " Note: could not get it below 1 MB.";
+          let msg;
+          if (lastUploadQueued) {
+            msg = slot + " could not reach the server. Saved on this phone — it will upload automatically once you're back online.";
+          } else {
+            msg = slot + " saved: " + files.length + " page(s), " + Math.round(result.blob.size / 1024) + " KB.";
+            if (!result.ok) msg += " Note: could not get it below 1 MB.";
+          }
           alert(msg);
         }
       } catch (err) {
@@ -1132,8 +1316,8 @@ let currentPatient = null;
 
       p.ward = newWard; p.bed_no = newBed; p.doctor_unit = newUnit;
       if (p.patient_category !== "Medicine") p.los_days = newLos;
-      document.getElementById('patientInfo').innerText =
-        `MRD: ${p.mrd} | Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | Unit: ${p.doctor_unit || "-"} | Category: ${p.patient_category}`;
+            document.getElementById('patientInfo').innerText =
+        `MRD: ${p.mrd} | PMJAY: ${p.pmjay_id || "-"} | Ward: ${p.ward || "Not assigned"} | Bed: ${p.bed_no || "Not assigned"} | Unit: ${p.doctor_unit || "-"} | Category: ${p.patient_category}`;
       status.innerText = "Saved.";
       showLosBanner();
       loadWardHistory();
