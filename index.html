@@ -248,7 +248,7 @@
   <div class="container">
     <div id="app" style="display:none;">
       <div class="top-actions">
-        <input type="text" id="searchInput" placeholder="Search name or MRD..." oninput="filterList()">
+        <input type="search" id="searchInput" name="patient-search-not-a-login-field" placeholder="Search name or MRD..." oninput="filterList()" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true">
         <button onclick="document.getElementById('filterPanel').style.display = document.getElementById('filterPanel').style.display === 'none' ? 'block' : 'none'">Filters <span id="filterCountBadge"></span></button>
         <button class="btn-secondary" onclick="clearFilters()">Clear</button>
         <button onclick="document.getElementById('addForm').style.display = document.getElementById('addForm').style.display === 'none' ? 'block' : 'none'">+ Add Patient</button>
@@ -421,7 +421,7 @@
 
     function buildFilterChips() {
       // Wards
-      const wards = ["NICU 1","NICU 2","PICU","CW-CTVS","A2","A3","B1","B2","B3","C2","C3","C5","PWM","PWS","GE","CW","EXT CW","CCU","ICU","HDUII"];
+      const wards = ["NICU 1","NICU 2","PICU","CW-CTVS","A2","A3","B1","B2","B3","C2","C3","C5","PWM","PWS","GE","CW","EXT CW","HDU I","CCU","ICU","HDUII"];
       document.getElementById('wardCheckboxes').innerHTML = wards.map(w =>
         `<label><input type="checkbox" value="${w}" onchange="filterList()"> ${w}</label>`
       ).join('');
