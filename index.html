@@ -396,7 +396,8 @@
       document.getElementById('app').style.display = "block";
       startInactivityTimer();
       buildFilterChips();
-      loadPatients();
+      restoreFilterState();
+      await loadPatients();
     }
 
     function toggleLosField() {
@@ -502,7 +503,7 @@
           if (aDischarged !== bDischarged) return aDischarged - bDischarged;
           return (a.name || "").localeCompare(b.name || "");
         });
-        renderList(allPatients);
+        filterList();
       } else {
         document.getElementById('patientList').innerHTML =
           "<p>Error loading patients" + (error ? ": " + error.message : ".") + "</p>";
@@ -599,8 +600,32 @@
       }).join('');
     }
 
+    function saveFilterState() {
+      const state = {
+        search: document.getElementById('searchInput').value,
+        wards: Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value),
+        categories: Array.from(document.querySelectorAll('#categoryCheckboxes input:checked')).map(cb => cb.value),
+        units: Array.from(document.querySelectorAll('#unitCheckboxes input:checked')).map(cb => cb.value)
+      };
+      sessionStorage.setItem('rkm_filter_state', JSON.stringify(state));
+    }
+
+    function restoreFilterState() {
+      const raw = sessionStorage.getItem('rkm_filter_state');
+      if (!raw) return;
+      try {
+        const state = JSON.parse(raw);
+        document.getElementById('searchInput').value = state.search || "";
+        document.querySelectorAll('#wardCheckboxes input').forEach(cb => cb.checked = (state.wards || []).includes(cb.value));
+        document.querySelectorAll('#categoryCheckboxes input').forEach(cb => cb.checked = (state.categories || []).includes(cb.value));
+        document.querySelectorAll('#unitCheckboxes input').forEach(cb => cb.checked = (state.units || []).includes(cb.value));
+        syncChipHighlights();
+      } catch (e) {}
+    }
+
     function filterList() {
       syncChipHighlights();
+      saveFilterState();
       const query = document.getElementById('searchInput').value.toLowerCase();
 
       const selectedWards = Array.from(document.querySelectorAll('#wardCheckboxes input:checked')).map(cb => cb.value);
@@ -672,6 +697,15 @@
 
     // Check session on load
     initApp();
+
+    // When the browser restores this page from the Back button instead of
+    // reloading it, 'initApp' at the top doesn't run again — this catches
+    // that case and refreshes the list and filters.
+    window.addEventListener('pageshow', (event) => {
+      if (event.persisted) {
+        initApp();
+      }
+    });
   </script>
   <script>
     if ('serviceWorker' in navigator) {
