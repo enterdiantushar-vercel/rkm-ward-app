@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "RKM Patient Data Manager",
-  "short_name": "RKM Patient",
+  "name": "RKMSP Patient Data Manager",
+  "short_name": "RKMSP Patient",
   "description": "Patient photo and chart tracker for Ramakrishna Mission hospital staff.",
   "start_url": "./index.html",
   "scope": "./",
