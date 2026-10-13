@@ -466,7 +466,8 @@
                label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>';
         if (e.photo_url) {
           html += '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
-                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>';
+                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>' +
+                  '<button class="download-btn" style="border-color:#FFA000; color:#FFA000;" onclick="splitCaptureByIndex(' + idx + ')">Split into 2</button>';
         } else {
           html += '<span style="color:#90A4AE; font-style:italic;">File auto-removed after 6 days (already saved to hospital server)</span>';
         }
@@ -659,9 +660,14 @@
       document.getElementById('fileInput').click();
     }
 
-   let pendingFiles = [];
+       let pendingFiles = [];
     let pendingSlot = "";
     const MAX_PDF_BYTES = 950000;
+    const COMPRESSION_ATTEMPTS = [
+      [1280, 0.70], [1280, 0.55], [1100, 0.55], [1000, 0.50],
+      [900, 0.45], [800, 0.40], [700, 0.40], [600, 0.35],
+      [550, 0.32], [500, 0.28], [450, 0.25]
+    ];
 
     function showMsg(msg) {
       document.getElementById('loadingText').innerText = msg;
@@ -914,6 +920,94 @@
       });
     }
 
+        function loadImageFromDataUrl(dataUrl) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+    }
+
+    async function splitCaptureByIndex(idx) {
+      const entry = allPhotoEntries[idx];
+      if (!entry || !entry.photo_url) {
+        alert("This file is not available to split (it may have already been auto-removed after 6 days).");
+        return;
+      }
+      if (!confirm("Split this document into 2 smaller files? The original combined file will be deleted afterwards.")) return;
+
+      try {
+        showMsg("Opening document...");
+        const { data: signed, error: signErr } = await supabaseClient.storage
+          .from('patient-photos')
+          .createSignedUrl(entry.photo_url, 300);
+        if (signErr || !signed) {
+          hideOverlay();
+          alert("Could not open file: " + (signErr ? signErr.message : "unknown error"));
+          return;
+        }
+
+        const pdfDoc = await pdfjsLib.getDocument(signed.signedUrl).promise;
+        const numPages = pdfDoc.numPages;
+        if (numPages <= 1) {
+          hideOverlay();
+          alert("This file only has 1 page, it can't be split further.");
+          return;
+        }
+
+        showMsg("Reading pages...");
+        const pageDataUrls = [];
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const baseViewport = page.getViewport({ scale: 1 });
+          const scale = 1280 / baseViewport.width;
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          pageDataUrls.push(canvas.toDataURL('image/jpeg', 0.85));
+        }
+
+        const mid = Math.ceil(numPages / 2);
+        const groups = [pageDataUrls.slice(0, mid), pageDataUrls.slice(mid)];
+        const summaryLines = [];
+
+        for (let g = 0; g < groups.length; g++) {
+          showMsg("Building part " + (g + 1) + " of 2...");
+          const items = [];
+          for (const dataUrl of groups[g]) {
+            const img = await loadImageFromDataUrl(dataUrl);
+            items.push({ img });
+          }
+          let blob = null;
+          for (const [w, q] of COMPRESSION_ATTEMPTS) {
+            blob = makeMultiPagePdf(items, w, q);
+            if (blob.size <= MAX_PDF_BYTES) break;
+          }
+          showMsg("Uploading part " + (g + 1) + " of 2...");
+          const ok = await uploadPdf(blob, entry.photo_type, entry.geo_location || "");
+          summaryLines.push("Part " + (g + 1) + ": " + (ok ? Math.round(blob.size / 1024) + " KB" : "upload failed"));
+        }
+
+        showMsg("Removing the original large file...");
+        const { error: rpcErr } = await supabaseClient.rpc('split_replace_photo', { old_photo_id: entry.id });
+        if (rpcErr) {
+          hideOverlay();
+          await loadAllPhotos();
+          alert("Split uploaded, but the original large file could not be removed: " + rpcErr.message);
+          return;
+        }
+
+        hideOverlay();
+        await loadAllPhotos();
+        alert("Split complete:\n" + summaryLines.join("\n"));
+      } catch (err) {
+        hideOverlay();
+        alert("Split failed: " + err.message);
+      }
+    }
     async function captureGeotagged(file, slotType) {
       try {
         showMsg("Getting location...");
@@ -981,10 +1075,7 @@
       try {
         for (const f of files) items.push(await loadImageFromFile(f));
 
-        const attempts = [
-          [1280, 0.70], [1280, 0.55], [1100, 0.55], [1000, 0.50],
-          [900, 0.45], [800, 0.40], [700, 0.40], [600, 0.35]
-        ];
+        const attempts = COMPRESSION_ATTEMPTS;
         let blob = null;
         for (let i = 0; i < attempts.length; i++) {
           showMsg("Compressing... (attempt " + (i + 1) + " of " + attempts.length + ")");
