@@ -465,9 +465,19 @@
         let html = '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">' +
                label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>';
         if (e.photo_url) {
+          const sizeBytes = e.file_size_bytes;
+          const sizeLabel = sizeBytes
+            ? (sizeBytes >= 1000000
+                ? (sizeBytes / 1000000).toFixed(2) + ' MB'
+                : Math.round(sizeBytes / 1000) + ' KB')
+            : '';
+          const isOversized = sizeBytes && sizeBytes > 1000000;
           html += '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
-                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>' +
-                  '<button class="download-btn" style="border-color:#FFA000; color:#FFA000;" onclick="splitCaptureByIndex(' + idx + ')">Split into 2</button>';
+                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download' +
+                  (sizeLabel ? ' (' + sizeLabel + ')' : '') + '</button>';
+          if (isOversized) {
+            html += '<button class="download-btn" style="border-color:#FFA000; color:#FFA000;" onclick="splitCaptureByIndex(' + idx + ')">Split into 2</button>';
+          }
         } else {
           html += '<span style="color:#90A4AE; font-style:italic;">File auto-removed after 6 days (already saved to hospital server)</span>';
         }
@@ -786,13 +796,12 @@
       await renderOfflinePendingForSlots();
     }
 
-    async function uploadPdf(pdfBlob, slotType, geoStoreText) {
-      lastUploadQueued = false;
-      try {
-        const filePath = `${mrd}/${today}/${slotType}-${Date.now()}.pdf`;
-        const { error: uploadError } = await supabaseClient.storage
-          .from('patient-photos')
-          .upload(filePath, pdfBlob);
+        async function uploadPdf(pdfBlob, slotType, geoStoreText) {
+      const filePath = `${mrd}/${today}/${slotType}-${Date.now()}.pdf`;
+      const fileSizeBytes = pdfBlob.size;
+      const { error: uploadError } = await supabaseClient.storage
+        .from('patient-photos')
+        .upload(filePath, pdfBlob);
 
         if (uploadError) {
           if (looksLikeNetworkFailure(uploadError)) {
@@ -804,17 +813,18 @@
           return false;
         }
 
-        const { error: insertError } = await supabaseClient
-          .from('daily_photos')
-          .insert([{
-            mrd: mrd,
-            photo_date: today,
-            photo_type: slotType,
-            photo_url: filePath,
-            file_type: "pdf",
-            geo_location: geoStoreText,
-            uploaded_by: currentUserEmail
-          }]);
+              const { error: insertError } = await supabaseClient
+        .from('daily_photos')
+        .insert([{
+          mrd: mrd,
+          photo_date: today,
+          photo_type: slotType,
+          photo_url: filePath,
+          file_type: "pdf",
+          geo_location: geoStoreText,
+          uploaded_by: currentUserEmail,
+          file_size_bytes: fileSizeBytes
+        }]);
 
         if (insertError) {
           if (looksLikeNetworkFailure(insertError)) {
