@@ -457,17 +457,49 @@
       if (error || !data) return;
       allPhotoEntries = data;
 
+      for (let idx = 0; idx < data.length; idx++) {
+        const e = data[idx];
+        if (e.photo_url && !e._fileSizeFormatted) {
+          try {
+            const { data: metaData } = await supabaseClient.storage
+              .from('patient-photos')
+              .list(e.photo_url.substring(0, e.photo_url.lastIndexOf('/')), {
+                search: e.photo_url.substring(e.photo_url.lastIndexOf('/') + 1)
+              });
+            
+            if (metaData && metaData.length > 0) {
+              e._fileSize = metaData[0].metadata.size || 0;
+            } else {
+              e._fileSize = 0;
+            }
+          } catch (err) {
+            e._fileSize = 0;
+          }
+          e._fileSizeFormatted = e._fileSize > 0 ? (e._fileSize / (1024 * 1024)).toFixed(2) + ' MB' : '';
+        }
+      }
+
       function entryHtml(idx) {
         const e = data[idx];
         const dt = parseUTC(e.uploaded_at);
         const label = dt.toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' }) +
                       ' ' + dt.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' });
-        let html = '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">' +
-               label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>';
+        
+        let html = '<div style="margin-top:6px; padding-top:6px; border-top:1px solid var(--border-light);">';
+        
+        if (e._fileSizeFormatted) {
+          html += '<div style="font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-bottom: 2px;">Size: ' + e._fileSizeFormatted + '</div>';
+        }
+
+        html += label + ' &mdash; captured by ' + esc(e.uploaded_by || "unknown") + '<br>';
+        
         if (e.photo_url) {
           html += '<button class="view-btn" onclick="viewPhotoByIndex(' + idx + ')">View</button>' +
-                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>' +
-                  '<button class="download-btn" style="border-color:#FFA000; color:#FFA000;" onclick="splitCaptureByIndex(' + idx + ')">Split into 2</button>';
+                  '<button class="download-btn" onclick="downloadPhotoByIndex(' + idx + ')">Download</button>';
+          
+          if (e._fileSize && e._fileSize > 1048576) {
+            html += '<button class="download-btn" style="border-color:#FFA000; color:#FFA000;" onclick="splitCaptureByIndex(' + idx + ')">Split into 2</button>';
+          }
         } else {
           html += '<span style="color:#90A4AE; font-style:italic;">File auto-removed after 6 days (already saved to hospital server)</span>';
         }
