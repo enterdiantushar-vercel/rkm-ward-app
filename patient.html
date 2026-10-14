@@ -82,7 +82,7 @@
       margin: 0 auto;
       padding: 4vw;
     }
-    #slotsContainer {
+    #slotsContainer, .slot-grid {
       display: grid;
       grid-template-columns: 1fr;
       gap: 12px;
@@ -167,13 +167,13 @@
 
     @media (min-width: 600px) {
       .container { padding: 24px; }
-      #slotsContainer { grid-template-columns: repeat(2, 1fr); }
+      #slotsContainer, .slot-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
     @media (min-width: 1024px) {
       .header { padding: 16px 40px; }
       .container { padding: 32px 40px; max-width: 1000px; }
-      #slotsContainer { grid-template-columns: repeat(3, 1fr); }
+      #slotsContainer, .slot-grid { grid-template-columns: repeat(3, 1fr); }
     }
     /* --- Full-Screen Loading Overlay --- */
 #loadingOverlay {
@@ -299,6 +299,8 @@
         <div id="categoryHistory" class="slot-status"></div>
       </div>
     </div>
+    <div id="dailyPhotosSection" style="display:none;"></div>
+
     <div id="slotsContainer"></div>
 
     <div class="discharge-section">
@@ -352,6 +354,7 @@
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
     const GEOTAG_SLOTS = ["Patient Photo", "Registration Photos", "Before Procedure", "During Procedure", "After Procedure", "Discharge Photo"];
+    const OT_DAILY_SLOTS = ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart"];
     function parseUTC(dateStr) {
       if (!dateStr) return new Date();
       if (!dateStr.endsWith('Z') && !dateStr.includes('+')) {
@@ -436,16 +439,52 @@
         slotTypes = ["Before Procedure", "During Procedure", "After Procedure", "Extra1", "Extra2"];
       }
       slotTypes = slotTypes.concat(["Registration Photos", "Registration Doc"]);
+      if (patientCategory === "OT") {
+        slotTypes = slotTypes.concat(OT_DAILY_SLOTS);
+      }
       currentSlotTypes = slotTypes;
 
+      const mainSlotTypes = patientCategory === "OT"
+        ? slotTypes.filter(t => !OT_DAILY_SLOTS.includes(t))
+        : slotTypes;
+
       const container = document.getElementById('slotsContainer');
-      container.innerHTML = slotTypes.map(type => `
+      container.innerHTML = mainSlotTypes.map(type => `
         <div id="slot-${type}" class="slot-card">
           <div class="slot-title">${type}</div>
           <div id="status-${type}" class="slot-status">Not captured</div>
           <button onclick="triggerCapture('${type}')">Capture</button>
         </div>
       `).join('') + '<div id="previousRecords" style="grid-column: 1 / -1;"></div>';
+
+      const dailySection = document.getElementById('dailyPhotosSection');
+      if (patientCategory === "OT") {
+        dailySection.style.display = "block";
+        dailySection.innerHTML = `
+          <div class="discharge-section" style="border-left-color: var(--teal-active); margin-top:0; margin-bottom:16px;">
+            <button type="button" onclick="toggleDailyPhotosBox()" style="background:#fff; color:#26A69A; border:1.5px solid #B9E4E0; margin:0;">Daily Photos &#9662;</button>
+            <div id="dailyPhotosBox" style="display:none; margin-top:10px;">
+              <div class="slot-grid">
+                ${OT_DAILY_SLOTS.map(type => `
+                  <div id="slot-${type}" class="slot-card">
+                    <div class="slot-title">${type}</div>
+                    <div id="status-${type}" class="slot-status">Not captured</div>
+                    <button onclick="triggerCapture('${type}')">Capture</button>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        dailySection.style.display = "none";
+        dailySection.innerHTML = "";
+      }
+    }
+
+    function toggleDailyPhotosBox() {
+      const box = document.getElementById('dailyPhotosBox');
+      box.style.display = box.style.display === "none" ? "block" : "none";
     }
     async function loadAllPhotos() {
       const { data, error } = await supabaseClient
