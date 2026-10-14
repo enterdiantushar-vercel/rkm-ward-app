@@ -341,6 +341,9 @@
       Chemo: ["Before Procedure", "During Procedure", "After Procedure"]
     };
 
+    const OT_DAILY_SLOTS = ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart"];
+    const PROCEDURE_SLOTS = ["Before Procedure", "During Procedure", "After Procedure"];
+
     const DOCTOR_UNITS = [
       { value: "UNIT1", label: "UNIT1" },
       { value: "UNIT2", label: "UNIT2" },
@@ -514,11 +517,28 @@
       if (p.is_discharged) return null;
       if (allPhotosToday.some(ph => ph.mrd === p.mrd && ph.photo_type === "Discharge Photo")) return null;
 
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const patientPhotos = allPhotosToday.filter(ph => ph.mrd === p.mrd);
+
+      if (p.patient_category === "OT") {
+        const hasProcedurePhoto = patientPhotos.some(ph => PROCEDURE_SLOTS.includes(ph.photo_type));
+        if (hasProcedurePhoto) {
+          return { otDone: true };
+        }
+        const relevantPhotos = patientPhotos.filter(ph => {
+          if (!ph.uploaded_at) return false;
+          let s = ph.uploaded_at;
+          if (!s.endsWith('Z') && !s.includes('+')) s += 'Z';
+          const d = new Date(s).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+          return d === today;
+        });
+        const capturedTypes = new Set(relevantPhotos.map(ph => ph.photo_type));
+        const missing = OT_DAILY_SLOTS.filter(slot => !capturedTypes.has(slot));
+        return { done: OT_DAILY_SLOTS.length - missing.length, total: OT_DAILY_SLOTS.length, missing, isDaily: true };
+      }
+
       const required = REQUIRED_SLOTS[p.patient_category] || [];
       const isDaily = p.patient_category === "Medicine";
-      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-
-      const patientPhotos = allPhotosToday.filter(ph => ph.mrd === p.mrd);
 
       const relevantPhotos = isDaily
         ? patientPhotos.filter(ph => {
@@ -578,13 +598,18 @@
         let trackingHtml = "";
         let cardClass = "";
         if (status) {
-          const label = status.isDaily ? "today" : "overall";
-          if (status.missing.length === 0) {
-            trackingHtml = `<div class="status-line status-complete">${status.done}/${status.total} done ${label} — All complete</div>`;
+          if (status.otDone) {
+            trackingHtml = `<div class="status-line status-complete">&#10003; OT DONE</div>`;
             cardClass = "complete";
           } else {
-            trackingHtml = `<div class="status-line status-incomplete">${status.done}/${status.total} done ${label} — Missing: ${status.missing.join(", ")}</div>`;
-            cardClass = "incomplete";
+            const label = status.isDaily ? "today" : "overall";
+            if (status.missing.length === 0) {
+              trackingHtml = `<div class="status-line status-complete">${status.done}/${status.total} done ${label} — All complete</div>`;
+              cardClass = "complete";
+            } else {
+              trackingHtml = `<div class="status-line status-incomplete">${status.done}/${status.total} done ${label} — Missing: ${status.missing.join(", ")}</div>`;
+              cardClass = "incomplete";
+            }
           }
         }
 
