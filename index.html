@@ -252,7 +252,7 @@
         <button onclick="document.getElementById('filterPanel').style.display = document.getElementById('filterPanel').style.display === 'none' ? 'block' : 'none'">Filters <span id="filterCountBadge"></span></button>
         <button class="btn-secondary" onclick="clearFilters()">Clear</button>
         <button onclick="document.getElementById('addForm').style.display = document.getElementById('addForm').style.display === 'none' ? 'block' : 'none'">+ Add Patient</button>
-        <button class="btn-secondary" onclick="downloadActiveCsv()">Download Active List (Ward-wise)</button>
+        <button class="btn-secondary" onclick="previewActiveList()">Preview Active List <span id="activeCountBadge"></span></button>
         <a href="enhancement.html"><button class="btn-secondary">Enhancement Tracker</button></a>
       </div>
 
@@ -384,6 +384,30 @@
       <div id="patientList">Loading...</div>
     </div>
 
+    <div id="activePreviewModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+      <div style="background:white; width:95%; max-width:800px; max-height:85vh; border-radius:10px; overflow:hidden; display:flex; flex-direction:column;">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:14px 18px; background:var(--teal-primary); flex-shrink:0;">
+          <span style="color:white; font-weight:600;">Active Patient List Preview <span id="previewCount" style="font-weight:400;"></span></span>
+          <button onclick="closeActivePreview()" style="background:transparent; border:none; color:white; font-size:22px; cursor:pointer; min-height:auto; padding:2px 10px;">&times;</button>
+        </div>
+        <div style="overflow-y:auto; padding:14px 18px;">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead>
+              <tr style="text-align:left; border-bottom:2px solid var(--border-light);">
+                <th style="padding:6px 4px;">Ward</th><th style="padding:6px 4px;">Bed</th><th style="padding:6px 4px;">MRD</th>
+                <th style="padding:6px 4px;">Name</th><th style="padding:6px 4px;">Category</th><th style="padding:6px 4px;">Doctor Unit</th>
+              </tr>
+            </thead>
+            <tbody id="previewTableBody"></tbody>
+          </table>
+        </div>
+        <div style="padding:14px 18px; border-top:1px solid var(--border-light); display:flex; gap:10px; flex-shrink:0;">
+          <button onclick="downloadActiveCsv()">Download CSV</button>
+          <button class="btn-secondary" onclick="closeActivePreview()">Close</button>
+        </div>
+      </div>
+    </div>
+
     <div id="login-box">
       <h2>Staff Login</h2>
       <label>Email</label>
@@ -410,26 +434,89 @@
     const OT_DAILY_SLOTS = ["Patient Photo", "IPD Chart", "Drug Chart", "TPRB Chart"];
     const PROCEDURE_SLOTS = ["Before Procedure", "During Procedure", "After Procedure"];
 
-    const DOCTOR_UNITS = [
-      { value: "ENT1", label: "ENT1" }, { value: "ENT2", label: "ENT2" }, { value: "ENT3", label: "ENT3" },
-      { value: "GYN1", label: "GYN1" }, { value: "GYN2", label: "GYN2" }, { value: "GYN3", label: "GYN3" },
-      { value: "GYN4", label: "GYN4" }, { value: "GYN5", label: "GYN5" }, { value: "GYN6", label: "GYN6" }, { value: "GYN7", label: "GYN7" },
-      { value: "ORTHO1", label: "ORTHO1" }, { value: "ORTHO2", label: "ORTHO2" },
-      { value: "PAEDMED1", label: "PAEDMED1" }, { value: "PAEDMED2", label: "PAEDMED2" }, { value: "PAEDMED3", label: "PAEDMED3" },
-      { value: "PAEDMED4", label: "PAEDMED4" }, { value: "PAEDMED5", label: "PAEDMED5" }, { value: "PAEDMED6", label: "PAEDMED6" },
-      { value: "GENSURG1", label: "GENSURG1" }, { value: "GENSURG2", label: "GENSURG2" }, { value: "GENSURG3", label: "GENSURG3" },
-      { value: "GENSURG4", label: "GENSURG4" }, { value: "GENSURG5", label: "GENSURG5" }, { value: "GENSURG6", label: "GENSURG6" },
-      { value: "URO1", label: "URO1" }, { value: "URO2", label: "URO2" },
-      { value: "GENMED1", label: "GENMED1" }, { value: "GENMED2", label: "GENMED2" }, { value: "GENMED3", label: "GENMED3" },
-      { value: "GENMED4", label: "GENMED4" }, { value: "GENMED5", label: "GENMED5" }, { value: "GENMED6", label: "GENMED6" },
-      { value: "DIAEND1", label: "DIAEND1" }, { value: "DIAEND2", label: "DIAEND2" },
-      { value: "CARDIO1", label: "CARDIO1" }, { value: "CARDIO2", label: "CARDIO2" }, { value: "CARDIO3", label: "CARDIO3" },
-      { value: "GASTRO1", label: "GASTRO1" }, { value: "GASTRO2", label: "GASTRO2" },
-      { value: "NEUROSUR1", label: "NEUROSUR1" },
-      { value: "MAXFAC1", label: "MAXFAC1" },
-      { value: "PLASTIC1", label: "PLASTIC1" },
-      { value: "PAEDSUR1", label: "PAEDSUR1" }, { value: "PAEDSUR2", label: "PAEDSUR2" }
+    const DOCTOR_UNIT_GROUPS = [
+      { specialty: "ENT", units: [
+        { value: "ENT1", label: "DR. RANJAN ROYCHOWDHURY / DR. SOURAV NASKAR / DR. PINAKI MAJUMDER" },
+        { value: "ENT2", label: "DR. AMITABHA ROYCHOWDHURY / DR. SOUMITRA GHOSH / DR. USHIRIN BOSE" },
+        { value: "ENT3", label: "DR. KOUSHIK MONDAL / DR. SOURABH GUPTA" }
+      ]},
+      { specialty: "GYNAE", units: [
+        { value: "GYN1", label: "DR. KRISHNENDU GUPTA / DR. ARUNABHA DAS" },
+        { value: "GYN2", label: "DR. SAJAL DUTTA / DR. ABHIJIT GHOSH / DR. BABITA SAHA" },
+        { value: "GYN3", label: "DR. SUKANTA MISRA / DR. ASHISH SEAL / DR. SOHINI CHOWDHURY" },
+        { value: "GYN4", label: "DR. SIBANI SENGUPTA / DR. SHUBHROJJWAL SAHA" },
+        { value: "GYN5", label: "DR. PARTHO SEN / DR. SUKUMAR SINHA / DR. CHIRANJIB MAJI" },
+        { value: "GYN6", label: "DR. GOUTAM GIRI" },
+        { value: "GYN7", label: "DR. PARTHO PAL / DR. JAYABRATA GHOSH" }
+      ]},
+      { specialty: "ORTHO", units: [
+        { value: "ORTHO1", label: "DR. KAUSHIK SARKAR / DR. KANAILAL JANA" },
+        { value: "ORTHO2", label: "DR. PRASANTA KR. PUJARI / DR. CHANDRACHUR BHATTACHERJEE" }
+      ]},
+      { specialty: "PAED-MEDICINE", units: [
+        { value: "PAEDMED1", label: "DR. SOUMITRA MASANI / DR. BAPPADITYA DAS" },
+        { value: "PAEDMED2", label: "DR. TAPABRATA CHATTERJEE / DR. APARNA MITRA / DR. NISHA BHATTACHARYYA" },
+        { value: "PAEDMED3", label: "DR. SUMITA BASU / DR. KUNAL MUKHERJEE / DR. SAUGATA BHATTACHARYYA" },
+        { value: "PAEDMED4", label: "DR. BRAJAGOPAL RAY / DR. SANTANU BAG" },
+        { value: "PAEDMED5", label: "DR. SADHNA SAHA / DR. SUPARNA GUHA / DR. ASHA MUKHERJEE" },
+        { value: "PAEDMED6", label: "DR. NEENA GHOSE / DR. KAUSIK SUR" }
+      ]},
+      { specialty: "GEN-SURGERY", units: [
+        { value: "GENSURG1", label: "DR. ACHINTYA KUMAR DAS / DR. SHIVAJI MANDAL" },
+        { value: "GENSURG2", label: "DR. PRATIP SENGUPTA / DR. SUNITI KR. HAJRA" },
+        { value: "GENSURG3", label: "DR. DHRUBAJYOTI BHAUMIK" },
+        { value: "GENSURG4", label: "DR. ZAYD ASHOK RAHMAN / DR. JOYDEEP GHOSH" },
+        { value: "GENSURG5", label: "DR. SURYASISH SENGUPTA" },
+        { value: "GENSURG6", label: "DR. KALYAN ASHIS MUKHERJEE / DR. DEBAYAN CHOWDHURY" }
+      ]},
+      { specialty: "UROLOGY", units: [
+        { value: "URO1", label: "DR. ANJAN DAS / DR. HIMADRI PATHAK / DR. BIMALESH PURKAIT" },
+        { value: "URO2", label: "DR. PRITHWIRAJ GHOSAL / DR. KOUSHIK SARKAR / DR. CHAYAN PAIK / DR. KALYAN SARKAR" }
+      ]},
+      { specialty: "GEN. MEDICINE", units: [
+        { value: "GENMED1", label: "DR. PRADEEP CHAKRABARTY / DR. SUJATA MAZUMDAR / DR. SHYAMOSREE MONDAL" },
+        { value: "GENMED2", label: "DR. AMITAVA MAZUMDAR / DR. UJJAL KR CHAKRAVARTY" },
+        { value: "GENMED3", label: "DR. TANMOY CHATTOPADHYAY / DR. SHYAMOSREE MONDAL" },
+        { value: "GENMED4", label: "DR. SUJOY ROYCHOWDHURY / DR. PRABUDHA MUKHOPADHYAY / DR. PARTHAJIT DAS / DR. PINAKI BANERJEE" },
+        { value: "GENMED5", label: "DR. BISWANATH PATRA / DR. SANDIPAN MUKHERJEE" },
+        { value: "GENMED6", label: "DR. TAPAS LAHA / DR. BARUN GHORUI" }
+      ]},
+      { specialty: "DIA & ENDOCRINE", units: [
+        { value: "DIAEND1", label: "DR. AJITESH ROY" },
+        { value: "DIAEND2", label: "DR. DEBAJYOTI CHAKRABORTY" }
+      ]},
+      { specialty: "CARDIOLOGY", units: [
+        { value: "CARDIO1", label: "DR. SUKUMAR GHOSH / DR. BISWARUP SARKAR" },
+        { value: "CARDIO2", label: "DR. SOUMITRA KUMAR / DR. SAUBHIK KANJILAL / DR. ABHINAY TIBDEWAL" },
+        { value: "CARDIO3", label: "DR. MANOJIT LODHA / DR. SANTANU DE / DR. MOUSUMI KUNDU" }
+      ]},
+      { specialty: "GASTRO-ENTEROLOGY", units: [
+        { value: "GASTRO1", label: "DR. DEBAJYOTI CHAKRABORTY" },
+        { value: "GASTRO2", label: "DR. SUDIPTA GHOSH" }
+      ]},
+      { specialty: "NEURO.SUR", units: [
+        { value: "NEUROSUR1", label: "DR. RAHUL SAHA" }
+      ]},
+      { specialty: "MAXILOFACIAL", units: [
+        { value: "MAXFAC1", label: "DR. SUMAN DAS" }
+      ]},
+      { specialty: "PLASTIC SURGERY", units: [
+        { value: "PLASTIC1", label: "DR. PRASANTA BHATTACHARYA" }
+      ]},
+      { specialty: "PAED.SUR", units: [
+        { value: "PAEDSUR1", label: "DR. D MITRA / DR. SANGHAMITRA BHATTACHARYA" },
+        { value: "PAEDSUR2", label: "DR. UTPAL ROY / DR. ANEEK ROY CHOWDHURY" }
+      ]}
     ];
+
+    function doctorUnitLabel(code) {
+      if (!code) return "Not assigned";
+      for (const g of DOCTOR_UNIT_GROUPS) {
+        const u = g.units.find(x => x.value === code);
+        if (u) return u.label;
+      }
+      return code;
+    }
 
     let allPatients = [];
     let allPhotosToday = [];
@@ -513,10 +600,15 @@
         `<label><input type="checkbox" value="${c}" onchange="filterList()"> ${c}</label>`
       ).join('');
 
-      // Doctor Units
-      document.getElementById('unitCheckboxes').innerHTML = DOCTOR_UNITS.map(u =>
-        `<label><input type="checkbox" value="${u.value}" onchange="filterList()"> ${u.label}</label>`
-      ).join('') + `<label><input type="checkbox" value="__none__" onchange="filterList()"> Not assigned</label>`;
+      // Doctor Units: grouped by specialty, each collapsed by default
+      document.getElementById('unitCheckboxes').innerHTML =
+        DOCTOR_UNIT_GROUPS.map((g, gi) => `
+          <div class="filter-section-title" style="font-size:11px; margin:4px 0 4px; text-transform:none;" onclick="toggleChipGroup('unitGroup_${gi}','unitChevron_${gi}')">${g.specialty} <span id="unitChevron_${gi}">&#9656;</span></div>
+          <div id="unitGroup_${gi}" class="chip-group" style="display:none; margin-bottom:6px;">
+            ${g.units.map(u => `<label><input type="checkbox" value="${u.value}" onchange="filterList()"> ${u.label}</label>`).join('')}
+          </div>
+        `).join('') +
+        `<label><input type="checkbox" value="__none__" onchange="filterList()"> Not assigned</label>`;
     }
 
     async function addPatient() {
@@ -585,6 +677,7 @@
           return (a.name || "").localeCompare(b.name || "");
         });
         filterList();
+        updateActiveCountBadge();
       } else {
         document.getElementById('patientList').innerHTML =
           "<p>Error loading patients" + (error ? ": " + error.message : ".") + "</p>";
@@ -691,7 +784,7 @@
           }
         }
 
-        const unitText = p.doctor_unit ? p.doctor_unit : "Not assigned";
+        const unitText = doctorUnitLabel(p.doctor_unit);
 
         return `
           <a href="patient.html?mrd=${p.mrd}" class="patient-card ${cardClass}">
@@ -762,14 +855,50 @@
       filterList();
     }
 
+    // "Active" for export means not discharged AND no Discharge Photo
+    // captured yet — once a discharge photo exists, that patient no longer
+    // needs daily tracking and shouldn't appear on the active list.
+    function getActiveForExport() {
+      return allPatients.filter(p => !p.is_discharged &&
+        !allPhotosToday.some(ph => ph.mrd === p.mrd && ph.photo_type === "Discharge Photo"));
+    }
+
+    function updateActiveCountBadge() {
+      const badge = document.getElementById('activeCountBadge');
+      if (badge) badge.innerText = '(' + getActiveForExport().length + ')';
+    }
+
+    function previewActiveList() {
+      const sorted = getActiveForExport().slice().sort((a, b) => {
+        const w = (a.ward || "").localeCompare(b.ward || "");
+        if (w !== 0) return w;
+        return (a.name || "").localeCompare(b.name || "");
+      });
+      document.getElementById('previewCount').innerText = '(' + sorted.length + ')';
+      document.getElementById('previewTableBody').innerHTML = sorted.map(p => `
+        <tr style="border-bottom:1px solid var(--border-light);">
+          <td style="padding:6px 4px;">${p.ward || "-"}</td>
+          <td style="padding:6px 4px;">${p.bed_no || "-"}</td>
+          <td style="padding:6px 4px;">${p.mrd}</td>
+          <td style="padding:6px 4px;">${p.name}</td>
+          <td style="padding:6px 4px;">${p.patient_category || "-"}</td>
+          <td style="padding:6px 4px;">${doctorUnitLabel(p.doctor_unit)}</td>
+        </tr>
+      `).join('');
+      document.getElementById('activePreviewModal').style.display = 'flex';
+    }
+
+    function closeActivePreview() {
+      document.getElementById('activePreviewModal').style.display = 'none';
+    }
+
     function downloadActiveCsv() {
-      const active = allPatients.filter(p => !p.is_discharged);
+      const active = getActiveForExport();
       if (active.length === 0) {
         alert("No active patients to download.");
         return;
       }
 
-      // Sort ward-wise, then by name
       const sorted = active.slice().sort((a, b) => {
         const w = (a.ward || "").localeCompare(b.ward || "");
         if (w !== 0) return w;
@@ -783,7 +912,7 @@
         p.mrd || "",
         p.name || "",
         p.pmjay_id || "",
-        p.doctor_unit || "",
+        doctorUnitLabel(p.doctor_unit),
         p.patient_category || "",
         p.admission_date || ""
       ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","));
