@@ -347,6 +347,10 @@
       <input type="text" id="adminNewMrd" placeholder="New MRD" style="width:100%; padding:10px; margin:6px 0; font-size:16px;">
       <button onclick="correctMrd()" style="background: var(--danger);">Correct MRD</button>
       <p id="mrdStatus" class="slot-status"></p>
+      <hr style="margin:14px 0; border:none; border-top:1px solid var(--border-light);">
+      <div class="slot-title" style="color:#E53935;">Delete this patient (restorable for 7 days)</div>
+      <button onclick="deletePatientCompletely()" style="background: var(--danger);">Delete Patient &amp; All Data</button>
+      <p id="deleteStatus" class="slot-status"></p>
     </div>
     <div class="slot-title">Category: <span id="currentCategoryLabel"></span></div>
       <button type="button" onclick="toggleConvertBox()" style="background:#fff; color:#2196F3; border:1.5px solid #BBDEFB;">Convert Category &#9662;</button>
@@ -1581,6 +1585,27 @@ let currentPatient = null;
       }
       await loadAllPhotos();
       alert("Deleted.");
+    }
+
+    async function deletePatientCompletely() {
+      const status = document.getElementById('deleteStatus');
+      const typed = prompt(
+        'This deletes ALL data for this patient (details, photos, histories).\n' +
+        'An admin can restore it for 7 days, after which it is erased permanently.\n\n' +
+        'Type the MRD (' + mrd + ') to confirm:'
+      );
+      if (typed === null) return;
+      if (typed.trim() !== String(mrd)) {
+        status.innerText = "MRD did not match. Nothing was deleted.";
+        return;
+      }
+      const { error } = await supabaseClient.rpc('admin_delete_patient', { p_mrd: mrd });
+      if (error) {
+        status.innerText = "Error: " + error.message;
+        return;
+      }
+      alert("Patient deleted. An admin can restore them from 'Recently Deleted' on the main list for the next 7 days.");
+      window.location.href = "index.html";
     }
 
     async function correctMrd() {
