@@ -247,16 +247,38 @@
 
         async function loadTracker() {
             // Filter strictly for Medicine category patients who are active (not discharged)
-            const { data: patients, error: pErr } = await supabaseClient
+            const { data: fetchedPatients, error: pErr } = await supabaseClient
                 .from('Patients')
                 .select('*')
                 .eq('is_discharged', false)
                 .eq('patient_category', 'Medicine');
 
-            if (pErr || !patients) {
+            if (pErr || !fetchedPatients) {
                 document.getElementById('list').innerText = "Error loading tracker: " + (pErr ? pErr.message : "Unknown error");
                 return;
             }
+
+            // Patients appear from the day AFTER their first Registration Photos capture.
+            // If no registration photos exist yet, they show anyway.
+            const todayForReg = istDateStr(new Date());
+            const regDateByMrd = {};
+            if (fetchedPatients.length > 0) {
+                const { data: regPhotos } = await supabaseClient
+                    .from('daily_photos')
+                    .select('mrd, photo_date')
+                    .eq('photo_type', 'Registration Photos')
+                    .in('mrd', fetchedPatients.map(p => p.mrd));
+                (regPhotos || []).forEach(r => {
+                    if (!r.photo_date) return;
+                    if (!regDateByMrd[r.mrd] || r.photo_date < regDateByMrd[r.mrd]) {
+                        regDateByMrd[r.mrd] = r.photo_date;
+                    }
+                });
+            }
+            const patients = fetchedPatients.filter(p => {
+                const regDate = regDateByMrd[p.mrd];
+                return !regDate || regDate < todayForReg;
+            });
 
             const activeMrds = patients.map(p => p.mrd);
             if (activeMrds.length === 0) {
