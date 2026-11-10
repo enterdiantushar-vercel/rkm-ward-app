@@ -374,7 +374,11 @@
     <div id="slotsContainer"></div>
 
     <div class="discharge-section">
-      <button type="button" onclick="toggleDischargeBox()" style="background:#fff; color:#E53935; border:1.5px solid #FFCDD2; margin:0;">Discharge Management &#9662;</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+        <button type="button" onclick="toggleDischargeBox()" style="background:#fff; color:#E53935; border:1.5px solid #FFCDD2; margin:0;">Discharge Management &#9662;</button>
+        <button type="button" id="markEnhancedBtn" onclick="markEnhancedFromPatient()" style="display:none; margin:0;">Mark as Enhanced</button>
+      </div>
+      <p id="enhancedStatus" class="slot-status" style="display:none;"></p>
       <div id="dischargeBox" style="display:none; margin-top:10px;">
         <button onclick="triggerCapture('Discharge Photo')">Capture Discharge Photo (Optional)</button>
         <button onclick="markPatientDischarged()" style="background: var(--danger); margin-left: 8px;">Mark as Discharged</button>
@@ -569,6 +573,7 @@
       patientCategory = patient.patient_category;
       currentPatient = patient;
       fillEditFields();
+      loadEnhancementInfo();
 
       if (patient.is_discharged) {
         document.getElementById('dischargeStatus').innerText = "Patient already discharged on " + patient.discharged_date;
@@ -1728,6 +1733,51 @@ let currentPatient = null;
         esc(h.new_ward || "-") + ' / ' + esc(h.new_bed || "-") +
         ' (' + esc(h.changed_by) + ')'
       ).join('<br>');
+    }
+
+    let enhancementInfo = null;
+
+    function enhFmt(d) {
+      return d.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' });
+    }
+
+    async function loadEnhancementInfo() {
+      const p = currentPatient;
+      const btn = document.getElementById('markEnhancedBtn');
+      const note = document.getElementById('enhancedStatus');
+      if (!btn || !p || p.is_discharged || p.patient_category !== "Medicine") return;
+
+      const { data, error } = await supabaseClient
+        .from('enhancement_log')
+        .select('marked_at, marked_by')
+        .eq('mrd', mrd)
+        .order('marked_at', { ascending: false })
+        .limit(1);
+      if (error) return;
+
+      btn.style.display = "inline-block";
+      note.style.display = "block";
+      if (data && data.length > 0) {
+        const last = parseUTC(data[0].marked_at);
+        const nextDue = new Date(last.getTime() + 48 * 3600 * 1000);
+        enhancementInfo = { nextDue };
+        note.innerText = "Last enhanced: " + enhFmt(last) + " by " + data[0].marked_by + " | Next due: " + enhFmt(nextDue);
+      } else {
+        enhancementInfo = null;
+        note.innerText = "Never enhanced.";
+      }
+    }
+
+    async function markEnhancedFromPatient() {
+      if (enhancementInfo && enhancementInfo.nextDue > new Date()) {
+        if (!confirm("Enhancement is not due until " + enhFmt(enhancementInfo.nextDue) + ". Mark as enhanced now anyway?")) return;
+      }
+      const { error } = await supabaseClient
+        .from('enhancement_log')
+        .insert([{ mrd: mrd, marked_by: currentUserEmail }]);
+      if (error) { alert("Error: " + error.message); return; }
+      await loadEnhancementInfo();
+      alert("Marked as enhanced.");
     }
 
     // --- ADDED MANUAL DISCHARGE FUNCTION HERE INSIDE THE SCRIPT ---
