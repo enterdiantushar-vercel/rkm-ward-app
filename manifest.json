@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "RKMSP Patient Data Manager",
-  "short_name": "RKMSP Patient",
-  "description": "Patient photo and chart tracker for Ramakrishna Mission hospital staff.",
+  "name": "RKMSP Clinical Suite",
+  "short_name": "RKMSP",
+  "description": "Ward, patient data and diagnostic modules for Ramakrishna Mission Seva Pratishthan staff.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
