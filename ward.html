@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RKMIPD - Clinical Progress Notes & Treatment Sheet</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        h1 { color: #0077b6; font-size: 24px; margin-bottom: 5px; }
+        .subtext { color: #666; font-size: 14px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
+        input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+        textarea { height: 90px; resize: vertical; }
+        .btn { background: #0077b6; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; margin-right: 10px; }
+        .btn:hover { background: #005f87; }
+        .btn-mic { background: #e76f51; }
+        .btn-mic.recording { background: #d90429; animation: pulse 1.5s infinite; }
+        .btn-pdf { background: #2a9d8f; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .action-bar { margin-top: 20px; display: flex; gap: 10px; align-items: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>IPD Clinical Progress Notes & Treatment Sheet</h1>
+    <div class="subtext">Ramakrishna Mission Seva Pratishthan — Ayushman Bharat (PM-JAY) Module</div>
+
+    <div class="form-group">
+        <label for="patientSelect">Select Admitted Patient:</label>
+        <select id="patientSelect">
+            <option value="">-- Loading Active Patients... --</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>SOAP Progress Notes Entry:</label>
+        <button type="button" id="micBtn" class="btn btn-mic" onclick="toggleVoiceDictation()">🎤 Start Voice Dictation</button>
+    </div>
+
+    <div class="form-group">
+        <label for="subjective">Subjective (Patient Symptoms / Complaints):</label>
+        <textarea id="subjective" placeholder="Enter patient complaints or dictate..."></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="objective">Objective (Vitals, Examination Findings):</label>
+        <textarea id="objective" placeholder="BP, Pulse, SpO2, systemic examination..."></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="assessment">Assessment (Clinical Diagnosis / Progress):</label>
+        <textarea id="assessment" placeholder="Current condition evaluation..."></textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="plan">Plan (Medications, Investigations, Orders):</label>
+        <textarea id="plan" placeholder="Treatment plan & orders..."></textarea>
+    </div>
+
+    <div class="action-bar">
+        <button class="btn" onclick="saveProgressNote()">Save Note to Supabase</button>
+        <button class="btn btn-pdf" onclick="generateOfficialPDF()">Download Official Letterhead PDF</button>
+    </div>
+</div>
+
+<script>
+    const SUPABASE_URL = 'https://cqjqewlzxebszpnqhmev.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_rTd12RguCfNQYezz4febZA_xuIJW3OM';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let recognition = null;
+    let activeField = 'subjective';
+
+    // Fetch active patients on page load
+    window.addEventListener('DOMContentLoaded', async () => {
+        const select = document.getElementById('patientSelect');
+        try {
+            const { data, error } = await supabaseClient.from('patients').select('id, name, mrd_number');
+            if (error) throw error;
+            
+            select.innerHTML = '<option value="">-- Select Admitted Patient --</option>';
+            if (data && data.length > 0) {
+                data.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = `${p.name} (MRD: ${p.mrd_number || 'N/A'})`;
+                    select.appendChild(opt);
+                });
+            } else {
+                select.innerHTML = '<option value="">No patients found. Add a patient first.</option>';
+            }
+        } catch (err) {
+            console.error('Error loading patients:', err);
+            select.innerHTML = '<option value="">Error loading patients from Supabase</option>';
+        }
+    });
+
+    // Track active field on focus
+    ['subjective', 'objective', 'assessment', 'plan'].forEach(id => {
+        document.getElementById(id).addEventListener('focus', () => { activeField = id; });
+    });
+
+    function toggleVoiceDictation() {
+        const micBtn = document.getElementById('micBtn');
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            alert('Speech recognition is not supported in this browser. Please use Google Chrome.');
+            return;
+        }
+
+        if (!recognition) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'en-IN';
+
+            recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                const field = document.getElementById(activeField);
+                field.value += ' ' + transcript;
+            };
+
+            recognition.onerror = (event) => { console.error('Speech recognition error', event.error); };
+            recognition.onend = () => {
+                micBtn.classList.remove('recording');
+                micBtn.innerText = '🎤 Start Voice Dictation';
+            };
+        }
+
+        if (micBtn.classList.contains('recording')) {
+            recognition.stop();
+        } else {
+            recognition.start();
+            micBtn.classList.add('recording');
+            micBtn.innerText = '🔴 Listening... (Click to Stop)';
+        }
+    }
+
+    async function saveProgressNote() {
+        const patientId = document.getElementById('patientSelect').value;
+        if (!patientId) {
+            alert('Please select a patient first.');
+            return;
+        }
+
+        const noteData = {
+            patient_id: patientId,
+            subjective: document.getElementById('subjective').value,
+            objective: document.getElementById('objective').value,
+            assessment: document.getElementById('assessment').value,
+            plan: document.getElementById('plan').value,
+            created_at: new Date()
+        };
+
+        const { error } = await supabaseClient.from('ipd_progress_notes').insert([noteData]);
+        if (error) {
+            alert('Error saving note: ' + error.message);
+        } else {
+            alert('Clinical progress note saved successfully!');
+        }
+    }
+
+    function generateOfficialPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        // Header
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text("RAMAKRISHNA MISSION SEVA PRATISHTHAN", 105, 20, { align: "center" });
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text("Ayushman Bharat (PM-JAY) IPD Treatment & Progress Sheet", 105, 26, { align: "center" });
+        doc.line(15, 32, 195, 32);
+
+        // Content
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("SOAP Clinical Progress Notes", 15, 42);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(11);
+        let y = 52;
+        
+        const sections = [
+            { title: "Subjective:", text: document.getElementById('subjective').value },
+            { title: "Objective:", text: document.getElementById('objective').value },
+            { title: "Assessment:", text: document.getElementById('assessment').value },
+            { title: "Plan:", text: document.getElementById('plan').value }
+        ];
+
+        sections.forEach(sec => {
+            doc.setFont("helvetica", "bold");
+            doc.text(sec.title, 15, y);
+            y += 6;
+            doc.setFont("helvetica", "normal");
+            const splitText = doc.splitTextToSize(sec.text || "N/A", 180);
+            doc.text(splitText, 15, y);
+            y += (splitText.length * 6) + 8;
+        });
+
+        // Footer
+        doc.line(15, 275, 195, 275);
+        doc.setFontSize(9);
+        doc.text("Generated via RKM Hospital PWA Workflow", 15, 282);
+        doc.text("Date: " + new Date().toLocaleString(), 195, 282, { align: "right" });
+
+        doc.save("IPD_Progress_Note.pdf");
+    }
+</script>
+</body>
+</html>
