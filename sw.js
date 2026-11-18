@@ -1,7 +1,7 @@
-const CACHE_NAME = "rkm-app-v5";
+const CACHE_NAME = "rkm-app-v6";
 const FILES_TO_CACHE = [
   "./index.html", "./patient-list.html", "./patient.html", "./enhancement.html",
-  "./ward.html", "./ward-list.html", "./diagnostic.html", "./manifest.json",
+  "./ward.html", "./nicu.html", "./ward-list.html", "./diagnostic.html", "./manifest.json",
   "./icon-192.png", "./icon-512.png", "./icon-180.png", "./icon-512-maskable.png"
 ];
 

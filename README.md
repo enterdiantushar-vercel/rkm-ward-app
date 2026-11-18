@@ -1,3 +1,0 @@
-# RKMSP Clinical Suite
-index.html (login + dashboard) -> ward.html / patient-list.html / diagnostic.html.
-Run ward_notes_setup.sql once in Supabase before using the Ward Module notes.
