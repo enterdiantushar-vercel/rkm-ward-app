@@ -37,6 +37,9 @@
     #interim { font-size:13px; color:var(--muted); font-style:italic; min-height:18px; }
     #status, #aiStatus { font-size:14px; margin-top:10px; min-height:20px; }
     .ok { color:#2E7D32; } .err { color:var(--danger); }
+    #idxList { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0; }
+    #idxList span { background:#EEF7F6; border:1px solid #CFE8E5; border-radius:14px; padding:4px 10px; font-size:12.5px; }
+    #idxList span.done { background:#C8E6C9; border-color:#81C784; }
     canvas#sig { border:1.5px dashed #90A4AE; border-radius:8px; background:#fff; touch-action:none; width:100%; max-width:360px; height:130px; display:block; }
     #sigPrev { max-height:70px; border:1px solid var(--border); border-radius:6px; background:#fff; padding:4px; }
   </style>
@@ -74,6 +77,8 @@
         <button type="button" id="aiBtn" class="btn-ai" onclick="sortWithAI()">Done &mdash; Sort with AI</button>
       </div>
       <div id="interim"></div>
+      <div class="info" style="margin:12px 0 0;"><b>Say these, in any order (green = captured):</b></div>
+      <div id="idxList"></div>
       <textarea id="dictation" placeholder="Example: Baby is stable, no fever. On room air, SpO2 98%. HR 140, CRT 2 sec. Abdomen soft. Feeds EBM 8 ml 2 hourly, no vomiting. Continue antibiotics day 3. Parents counselled."></textarea>
       <div class="info">When you stop the voice, the AI sorts the text into the fields below automatically. You can still check and correct every field.</div>
       <div id="aiStatus"></div>
@@ -86,6 +91,7 @@
 
     <div class="card" id="sigCard" style="display:none;">
       <h3>3. Doctor signature</h3>
+      <div id="profNote" class="info" style="margin:0 0 10px;"></div>
       <div class="grid" style="margin-bottom:10px;">
         <div><label>Doctor name</label><input id="docName" placeholder="Dr. ..."></div>
         <div><label>Designation / Reg. no.</label><input id="docDesig" placeholder="e.g. RMO / Consultant"></div>
@@ -132,6 +138,8 @@
       ['plan','Plan'],
       ['other','Other notes']
     ];
+    $('idxList').innerHTML = SECTIONS.filter(x => x[0] !== 'other').map(([k, l], i) => `<span id="i_${k}">${i + 1}. ${esc(l)}</span>`).join('') + '<span id="i_cw">Current weight</span>';
+    function markIdx() { SECTIONS.forEach(([k]) => { const e = $('i_' + k); if (e) e.classList.toggle('done', !!$('f_' + k).value.trim()); }); $('i_cw').classList.toggle('done', !!$('current_weight').value.trim()); }
     const DEMO = ['sex','dob','ga','birth_weight','admission_weight'];
 
     let patients = [], userEmail = "", logoData = null, recognition = null, listening = false, sigImg = null, drawn = false, timer;
@@ -151,10 +159,12 @@
       const { data } = await supabaseClient.auth.getSession();
       if (!data.session) { location.href = "index.html"; return; }
       userEmail = data.session.user.email; resetTimer();
-      loadLogo(); initSig(); loadSavedSig();
+      loadLogo(); initSig(); loadSavedSig(); loadProfile(data.session.user.id);
       const { data: rows, error } = await supabaseClient.from('Patients').select('*').eq('is_discharged', false).order('ward', { ascending: true }).order('name', { ascending: true });
       if (error) { $('patientSelect').innerHTML = '<option value="">Error: ' + esc(error.message) + '</option>'; return; }
       patients = rows || []; renderOptions();
+      const qm = new URLSearchParams(location.search).get('mrd');
+      if (qm && patients.some(p => String(p.mrd) === qm)) { $('patientSelect').value = qm; onPatient(); document.querySelector('.container .card').style.display = 'none'; }
     }
     function renderOptions() {
       const q = $('ptSearch').value.trim().toLowerCase(), cur = $('patientSelect').value;
@@ -169,7 +179,7 @@
       $('autoInfo').innerHTML = `<strong>${esc(p.name)}</strong> | MRD ${esc(p.mrd)} | Ward ${esc(p.ward || '-')} | Bed ${esc(p.bed_no || '-')} | Unit ${esc(p.doctor_unit || '-')} | Admitted ${esc(p.admission_date || '-')}`;
       DEMO.forEach(k => $(k).value = (k === 'ga' ? p.gestational_age : p[k]) || '');
       $('current_weight').value = ''; $('chart_date').value = today();
-      SECTIONS.forEach(([k]) => $('f_' + k).value = ''); $('dictation').value = ''; $('aiStatus').innerText = ''; $('status').innerText = '';
+      SECTIONS.forEach(([k]) => $('f_' + k).value = ''); $('dictation').value = ''; markIdx(); $('aiStatus').innerText = ''; $('status').innerText = '';
     }
 
     /* ---------- derived age / CGA ---------- */
@@ -224,6 +234,7 @@
         let n = 0;
         SECTIONS.forEach(([k]) => { if (j.fields[k]) { $('f_' + k).value = j.fields[k]; n++; } });
         if (j.fields.current_weight) $('current_weight').value = j.fields.current_weight;
+        markIdx();
         st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing.';
         $('fieldsCard').scrollIntoView({ behavior: 'smooth' });
       } catch (e) { st.className = 'err'; st.innerText = 'AI sorting failed: ' + e.message; }
@@ -252,6 +263,20 @@
     function loadSavedSig() {
       try { const s = JSON.parse(localStorage.getItem(sigKey()) || 'null'); if (s) { $('docName').value = s.name; $('docDesig').value = s.desig || ''; sigImg = s.img; showSigPrev(); } } catch (_) {}
     }
+    let profile = null;
+    function blobToPng(blob) { return new Promise(res => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; c.getContext('2d').drawImage(im, 0, 0); res(c.toDataURL('image/png')); }; im.onerror = () => res(null); im.src = URL.createObjectURL(blob); }); }
+    async function loadProfile(uid) {
+      try {
+        const note = $('profNote');
+        const { data } = await supabaseClient.from('doctor_profiles').select('*').eq('user_id', uid).maybeSingle();
+        if (!data) { note.innerHTML = 'No hospital signature set up. <a href="signature.html">Set up my signature &amp; stamp</a> (or draw one below).'; return; }
+        if (!data.approved) { note.innerHTML = 'Your signature is waiting for admin approval. Until then you can draw one below.'; return; }
+        const get = async p => { if (!p) return null; const r = await supabaseClient.storage.from('doctor-signatures').download(p); return r.data ? await blobToPng(r.data) : null; };
+        const [s, st] = await Promise.all([get(data.signature_path), get(data.stamp_path)]);
+        profile = { name: data.full_name, desig: [data.designation, data.reg_no ? 'Reg. No. ' + data.reg_no : ''].filter(Boolean).join(', '), img: s, stamp: st };
+        note.innerHTML = '&#10003; Your approved hospital signature' + (st ? ' and stamp' : '') + ' will be used on the PDF.';
+      } catch (e) {}
+    }
     function showSigPrev() { const i = $('sigPrev'); if (sigImg) { i.src = sigImg; i.style.display = 'inline-block'; } }
 
     /* ---------- save + PDF ---------- */
@@ -268,15 +293,20 @@
       const p = sel(); if (!p) return;
       const c = collect();
       if (!SECTIONS.some(([k]) => c.sections[k])) { status('Fill at least one section first.', false); return; }
-      if (!sigImg && !confirm('No signature saved. Print without a signature?')) return;
+      if (!sigImg && !profile && !confirm('No signature saved. Print without a signature?')) return;
       $('pdfBtn').disabled = true; let msg = '';
       const demo = { dob: $('dob').value || null, sex: $('sex').value || null, gestational_age: $('ga').value.trim() || null, birth_weight: $('birth_weight').value.trim() || null, admission_weight: $('admission_weight').value.trim() || null };
       const r1 = await supabaseClient.from('Patients').update(demo).eq('mrd', p.mrd);
-      const sig = sigImg ? (JSON.parse(localStorage.getItem(sigKey()) || '{}')) : {};
-      const r2 = await supabaseClient.from('nicu_charts').insert([{ mrd: String(p.mrd), chart_date: c.chart_date, data: { ...c.sections, current_weight: c.current_weight }, signed_by: $('docName').value.trim() || null, author_email: userEmail }]);
+      const sig = profile ? profile : (sigImg ? JSON.parse(localStorage.getItem(sigKey()) || '{}') : {});
+      const r2 = await supabaseClient.from('nicu_charts').insert([{ mrd: String(p.mrd), chart_date: c.chart_date, data: { ...c.sections, current_weight: c.current_weight }, signed_by: (profile ? profile.name : $('docName').value.trim()) || null, author_email: userEmail }]);
       if (r1.error || r2.error) msg = 'PDF created, but saving failed: ' + ((r1.error || r2.error).message) + ' (run nicu_setup.sql in Supabase).';
       Object.assign(p, demo);
-      buildPdf(p, c, sig);
+      const out = buildPdf(p, c, sig);
+      const day = today(), path = p.mrd + '/' + day + '/IPD Chart-' + Date.now() + '.pdf';
+      const up = await supabaseClient.storage.from('patient-photos').upload(path, out.blob);
+      if (up.error) msg += ' PDF upload failed: ' + up.error.message + '.';
+      else { const ins = await supabaseClient.from('daily_photos').insert([{ mrd: p.mrd, photo_date: day, photo_type: 'IPD Chart', photo_url: path, file_type: 'pdf', geo_location: '', uploaded_by: userEmail }]); if (ins.error) msg += ' Could not add to daily photos: ' + ins.error.message + '.'; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(out.blob); a.download = out.name; a.click();
       status(msg || 'Chart saved and PDF generated.', !msg);
       $('pdfBtn').disabled = false;
     }
@@ -325,13 +355,14 @@
       if (y + 30 > BOTTOM) { doc.addPage(); head(false); }
       y += 4;
       if (sig && sig.img) doc.addImage(sig.img, 'PNG', R - 55, y, 50, 18);
+      if (sig && sig.stamp) doc.addImage(sig.stamp, 'PNG', R - 100, y, 32, 32);
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(sig && sig.name ? sig.name : '____________________', R, y + 22, { align: 'right' });
       doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
       if (sig && sig.desig) doc.text(sig.desig, R, y + 27, { align: 'right' });
       doc.text('Signed: ' + new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }), R, y + 32, { align: 'right' });
       const n = doc.getNumberOfPages();
       for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setLineWidth(0.3); doc.line(L, 282, R, 282); doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.text(NOTE, L, 287); doc.setFont('helvetica', 'normal'); doc.text('Page ' + i + ' of ' + n, R, 291, { align: 'right' }); }
-      doc.save('NICU_Chart_' + String(p.mrd).replace(/[^\w-]/g, '') + '_' + c.chart_date + '.pdf');
+      return { blob: doc.output('blob'), name: 'NICU_Chart_' + String(p.mrd).replace(/[^\w-]/g, '') + '_' + c.chart_date + '.pdf' };
     }
 
     init();

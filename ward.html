@@ -2,92 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Ward Module - IPD Progress Notes</title>
+  <title>Ward Module - RKMSP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4DB6AC">
   <link rel="apple-touch-icon" href="icon-180.png">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
-    :root { --teal:#4DB6AC; --teal-d:#26A69A; --sky:#42A5F5; --bg:#F0FAF9; --text:#263238; --muted:#607D8B; --border:#DCEFED; --danger:#E53935; }
+    :root { --teal:#4DB6AC; --teal-d:#26A69A; --sky:#42A5F5; --bg:#F0FAF9; --text:#263238; --muted:#607D8B; --border:#DCEFED; }
     * { box-sizing:border-box; }
     body { font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; margin:0; background:var(--bg); color:var(--text); }
     .header { background:var(--teal); color:#fff; padding:12px 5vw; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; }
     .header a { color:#fff; text-decoration:none; font-size:14px; }
     .header h1 { margin:2px 0 0; font-size:clamp(17px,4vw,21px); }
     .container { max-width:900px; margin:0 auto; padding:4vw; }
-    .card { background:#fff; border-radius:12px; padding:18px; margin-bottom:16px; box-shadow:0 2px 8px rgba(38,50,56,.06); border:1px solid var(--border); }
-    label { display:block; font-weight:600; font-size:14px; margin:0 0 5px; }
-    input, textarea, select { width:100%; padding:11px; border:1px solid #D3E7E5; border-radius:8px; font-size:16px; background:#FBFEFE; color:var(--text); font-family:inherit; }
-    textarea { min-height:90px; resize:vertical; }
-    input:focus, textarea:focus, select:focus { outline:0; border-color:var(--teal-d); box-shadow:0 0 0 3px rgba(38,166,154,.15); }
-    .fg { margin-bottom:14px; }
-    button { background:var(--sky); color:#fff; border:0; padding:11px 18px; border-radius:8px; font-size:15px; font-weight:500; cursor:pointer; min-height:44px; }
-    button:hover { filter:brightness(.95); }
-    button:disabled { opacity:.6; cursor:default; }
-    .btn-mic { background:#E76F51; } .btn-mic.rec { background:#D90429; animation:pulse 1.4s infinite; }
-    .btn-pdf { background:var(--teal-d); } .btn-alt { background:#fff; color:var(--teal-d); border:1.5px solid #B9E4E0; }
-    @keyframes pulse { 50% { opacity:.55; } }
-    .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .info { font-size:13px; color:var(--muted); margin-top:8px; }
-    #interim { font-size:13px; color:var(--muted); font-style:italic; min-height:18px; margin-top:6px; }
-    #status { font-size:14px; margin-top:10px; min-height:20px; }
-    .ok { color:#2E7D32; } .err { color:var(--danger); }
-    .note { border-bottom:1px solid var(--border); padding:10px 0; font-size:14px; }
-    .note:last-child { border-bottom:0; }
-    .note small { color:var(--muted); }
-    .note div.snip { margin:4px 0 8px; white-space:pre-wrap; }
-    .pt-info { background:#F4FBFA; border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:14px; margin-bottom:14px; display:none; }
+    input { width:100%; padding:12px; border:1px solid #D3E7E5; border-radius:8px; font-size:16px; background:#fff; margin-bottom:14px; }
+    input:focus { outline:0; border-color:var(--teal-d); box-shadow:0 0 0 3px rgba(38,166,154,.15); }
+    button { background:var(--sky); color:#fff; border:0; padding:11px 18px; border-radius:8px; font-size:15px; cursor:pointer; min-height:44px; }
+    .btn-alt { background:#fff; color:var(--teal-d); border:1.5px solid #B9E4E0; }
+    .wards { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+    @media (min-width:640px) { .wards { grid-template-columns:repeat(4,1fr); } }
+    .ward { background:#fff; border:1px solid var(--border); border-top:4px solid var(--teal); border-radius:12px; padding:18px 10px; text-align:center; font-weight:700; font-size:16px; color:var(--text); cursor:pointer; min-height:70px; }
+    .ward small { display:block; font-weight:400; color:var(--muted); margin-top:4px; font-size:12.5px; }
+    .pt { display:flex; gap:12px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:10px; padding:12px 14px; margin-bottom:10px; cursor:pointer; }
+    .pt b { flex:1; } .pt span { color:var(--muted); font-size:13px; }
+    .note { font-size:13px; color:var(--muted); margin:6px 0 14px; }
+    h2 { margin:0 0 10px; font-size:19px; }
   </style>
 </head>
 <body>
   <div class="header">
-    <div>
-      <a href="index.html">&larr; Dashboard</a>
-      <h1>Ward Module &mdash; IPD Progress Notes</h1>
-    </div>
-    <div class="bar">
-      <a href="nicu.html"><button class="btn-alt">NICU / Pediatric Chart</button></a>
-      <a href="ward-list.html"><button class="btn-alt">Ward-wise List</button></a>
-      <button class="btn-alt" onclick="logout()">Logout</button>
-    </div>
+    <div><a href="index.html">&larr; Dashboard</a><h1>Ward Module</h1></div>
+    <div><a href="ward-list.html"><button class="btn-alt">Ward-wise List (print)</button></a></div>
   </div>
-
   <div class="container">
-    <div class="card">
-      <div class="fg">
-        <label for="ptSearch">Find patient (name, MRD, ward, bed)</label>
-        <input type="search" id="ptSearch" placeholder="Type to filter..." oninput="renderPatientOptions()" autocomplete="off">
-      </div>
-      <div class="fg" style="margin-bottom:0;">
-        <label for="patientSelect">Admitted patient</label>
-        <select id="patientSelect" onchange="onPatientChange()"><option value="">Loading patients...</option></select>
-      </div>
+    <div id="wardView">
+      <input type="search" id="wardSearch" placeholder="Search ward name..." oninput="renderWards()" autocomplete="off">
+      <div class="note">Choose a ward. All wards currently use the NICU / Pediatric chart format.</div>
+      <div id="wards" class="wards">Loading...</div>
     </div>
-
-    <div class="card">
-      <div id="ptInfo" class="pt-info"></div>
-      <div class="fg">
-        <button type="button" id="micBtn" class="btn-mic" onclick="toggleVoice()">&#127908; Start Voice Dictation</button>
-        <div class="info">Tap a box below first, then dictate into it. Language: English (India).</div>
-        <div id="interim"></div>
-      </div>
-      <div class="fg"><label for="subjective">Subjective (symptoms / complaints)</label><textarea id="subjective" placeholder="Patient complaints..."></textarea></div>
-      <div class="fg"><label for="objective">Objective (vitals, examination)</label><textarea id="objective" placeholder="BP, pulse, SpO2, systemic examination..."></textarea></div>
-      <div class="fg"><label for="assessment">Assessment (diagnosis / progress)</label><textarea id="assessment" placeholder="Current condition..."></textarea></div>
-      <div class="fg"><label for="plan">Plan (medications, investigations, orders)</label><textarea id="plan" placeholder="Treatment plan and orders..."></textarea></div>
-      <div class="bar">
-        <button id="saveBtn" onclick="saveNote()">Save Note</button>
-        <button class="btn-pdf" onclick="pdfFromForm()">Download Letterhead PDF</button>
-        <button class="btn-alt" onclick="clearForm()">Clear</button>
-      </div>
-      <div id="status"></div>
-    </div>
-
-    <div class="card">
-      <strong>Previous notes for this patient</strong>
-      <div id="history" class="info">Select a patient to see saved notes.</div>
+    <div id="patView" style="display:none;">
+      <button class="btn-alt" onclick="backToWards()" style="margin-bottom:12px;">&larr; All wards</button>
+      <h2 id="wardTitle"></h2>
+      <input type="search" id="ptSearch" placeholder="Search patient name, MRD or bed..." oninput="renderPatients()" autocomplete="off">
+      <div id="patients"></div>
     </div>
   </div>
 
@@ -96,171 +54,41 @@
     const SUPABASE_KEY = "sb_publishable_rTd12RguCfNQYezz4febZA_xuIJW3OM";
     const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const $ = id => document.getElementById(id);
-    const FIELDS = ['subjective','objective','assessment','plan'];
-    let patients = [], userEmail = "", activeField = 'subjective', recognition = null, listening = false, logoData = null, notesCache = [];
-    let timer;
-
     const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-    const sel = () => patients.find(p => String(p.mrd) === $('patientSelect').value);
-
-    function resetTimer() {
-      clearTimeout(timer);
-      timer = setTimeout(async () => { await supabaseClient.auth.signOut(); alert("Logged out after 30 minutes of inactivity."); location.href = "index.html"; }, 30 * 60 * 1000);
-    }
-    ['mousemove','keydown','touchstart','click','scroll'].forEach(e => document.addEventListener(e, resetTimer));
-    async function logout() { await supabaseClient.auth.signOut(); location.href = "index.html"; }
-
-    function setStatus(t, ok) { const s = $('status'); s.className = ok ? 'ok' : 'err'; s.innerText = t; }
+    const WARDS = ["NICU 1","NICU 2","PICU","CW-CTVS","A2","A3","B1","B2","B3","C2","C3","C5","PWM","PWS","GE","CW","EXT CW","HDU I","CCU","ICU","HDUII"];
+    let patients = [], current = "";
+    const inWard = (p, w) => (p.ward || "").split(",").map(x => x.trim()).includes(w);
 
     async function init() {
       const { data } = await supabaseClient.auth.getSession();
       if (!data.session) { location.href = "index.html"; return; }
-      userEmail = data.session.user.email;
-      resetTimer();
-      FIELDS.forEach(id => $(id).addEventListener('focus', () => activeField = id));
-      loadLogo();
-      const { data: rows, error } = await supabaseClient.from('Patients')
-        .select('mrd,name,ward,bed_no,doctor_unit,patient_category,admission_date')
-        .eq('is_discharged', false).order('ward', { ascending: true }).order('name', { ascending: true });
-      if (error) { $('patientSelect').innerHTML = '<option value="">Error: ' + esc(error.message) + '</option>'; return; }
+      const { data: rows, error } = await supabaseClient.from('Patients').select('mrd,name,ward,bed_no').eq('is_discharged', false).order('name', { ascending: true });
+      if (error) { $('wards').innerText = "Error: " + error.message; return; }
       patients = rows || [];
-      renderPatientOptions();
+      renderWards();
+      const last = sessionStorage.getItem('rkmWard'); if (last) openWard(last);
     }
-
-    function renderPatientOptions() {
+    function allWards() {
+      const extra = new Set(); patients.forEach(p => (p.ward || "").split(",").forEach(x => { x = x.trim(); if (x && !WARDS.includes(x)) extra.add(x); }));
+      return WARDS.concat([...extra]);
+    }
+    function renderWards() {
+      const q = $('wardSearch').value.trim().toLowerCase();
+      const list = allWards().filter(w => !q || w.toLowerCase().includes(q));
+      $('wards').innerHTML = list.length ? list.map(w => `<div class="ward" onclick="openWard(this.dataset.w)" data-w="${esc(w)}">${esc(w)}<small>${patients.filter(p => inWard(p, w)).length} patients</small></div>`).join('') : 'No ward found.';
+    }
+    function openWard(w) {
+      current = w; sessionStorage.setItem('rkmWard', w);
+      $('wardTitle').innerText = "Ward: " + w; $('ptSearch').value = "";
+      $('wardView').style.display = 'none'; $('patView').style.display = 'block'; renderPatients();
+    }
+    function backToWards() { sessionStorage.removeItem('rkmWard'); $('patView').style.display = 'none'; $('wardView').style.display = 'block'; }
+    function renderPatients() {
       const q = $('ptSearch').value.trim().toLowerCase();
-      const cur = $('patientSelect').value;
-      const list = patients.filter(p => !q || [p.name, p.mrd, p.ward, p.bed_no].join(' ').toLowerCase().includes(q));
-      $('patientSelect').innerHTML = '<option value="">-- Select patient (' + list.length + ') --</option>' +
-        list.map(p => `<option value="${esc(p.mrd)}">${esc(p.ward || '-')} / ${esc(p.bed_no || '-')} — ${esc(p.name)} (MRD ${esc(p.mrd)})</option>`).join('');
-      if (cur && list.some(p => String(p.mrd) === cur)) $('patientSelect').value = cur;
+      const list = patients.filter(p => inWard(p, current) && (!q || [p.name, p.mrd, p.bed_no].join(' ').toLowerCase().includes(q)));
+      $('patients').innerHTML = list.length ? list.map(p => `<div class="pt" onclick="location.href='nicu.html?mrd=' + encodeURIComponent(this.dataset.m)" data-m="${esc(p.mrd)}"><b>${esc(p.name)}</b><span>Bed ${esc(p.bed_no || '-')}</span><span>MRD ${esc(p.mrd)}</span></div>`).join('') : '<div class="note">No admitted patients found in this ward.</div>';
     }
-
-    function onPatientChange() {
-      const p = sel(), box = $('ptInfo');
-      if (!p) { box.style.display = 'none'; $('history').innerText = 'Select a patient to see saved notes.'; return; }
-      box.style.display = 'block';
-      box.innerHTML = `<strong>${esc(p.name)}</strong> &nbsp;|&nbsp; MRD: ${esc(p.mrd)} &nbsp;|&nbsp; Ward: ${esc(p.ward || '-')} &nbsp;|&nbsp; Bed: ${esc(p.bed_no || '-')} &nbsp;|&nbsp; Unit: ${esc(p.doctor_unit || '-')}`;
-      loadHistory();
-    }
-
-    async function loadHistory() {
-      const p = sel(); if (!p) return;
-      $('history').innerText = 'Loading...';
-      const { data, error } = await supabaseClient.from('ipd_progress_notes').select('*').eq('mrd', String(p.mrd)).order('created_at', { ascending: false }).limit(15);
-      if (error) { $('history').innerHTML = '<span class="err">Could not load notes: ' + esc(error.message) + (/relation|does not exist|schema cache/i.test(error.message) ? ' — run ward_notes_setup.sql in Supabase first.' : '') + '</span>'; return; }
-      notesCache = data || [];
-      $('history').innerHTML = notesCache.length ? notesCache.map((n, i) => `
-        <div class="note"><small>${new Date(n.created_at).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })} &middot; ${esc(n.author_email || '')}</small>
-          <div class="snip">${esc((n.assessment || n.subjective || n.plan || '').slice(0, 160))}</div>
-          <button class="btn-alt" style="min-height:36px;padding:6px 12px;font-size:13px;" onclick="pdfFromNote(${i})">PDF</button></div>`).join('') : 'No saved notes yet.';
-    }
-
-    function formValues() { const o = {}; FIELDS.forEach(f => o[f] = $(f).value.trim()); return o; }
-    function clearForm() { FIELDS.forEach(f => $(f).value = ''); $('interim').innerText = ''; }
-
-    async function saveNote() {
-      const p = sel(); if (!p) { setStatus('Please select a patient first.', false); return; }
-      const v = formValues();
-      if (!FIELDS.some(f => v[f])) { setStatus('Enter at least one SOAP field.', false); return; }
-      $('saveBtn').disabled = true;
-      const { error } = await supabaseClient.from('ipd_progress_notes').insert([{ mrd: String(p.mrd), patient_name: p.name, ward: p.ward, bed_no: p.bed_no, author_email: userEmail, ...v }]);
-      $('saveBtn').disabled = false;
-      if (error) { setStatus('Error saving: ' + error.message + (/relation|does not exist|schema cache/i.test(error.message) ? ' (run ward_notes_setup.sql in Supabase)' : ''), false); return; }
-      setStatus('Progress note saved.', true);
-      clearForm(); loadHistory();
-    }
-
-    /* ---------- Voice dictation ---------- */
-    function toggleVoice() {
-      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SR) { alert('Speech recognition is not supported in this browser. Please use Google Chrome.'); return; }
-      const btn = $('micBtn');
-      if (listening) { listening = false; recognition.stop(); return; }
-      recognition = new SR();
-      recognition.continuous = true; recognition.interimResults = true; recognition.lang = 'en-IN';
-      recognition.onresult = e => {
-        let interim = '';
-        const f = $(activeField);
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) f.value += (f.value && !/\s$/.test(f.value) ? ' ' : '') + t.trim();
-          else interim += t;
-        }
-        $('interim').innerText = interim ? '… ' + interim : '';
-      };
-      recognition.onerror = e => {
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { listening = false; alert('Microphone permission denied. Allow microphone access and try again.'); }
-      };
-      recognition.onend = () => {
-        if (listening) { try { recognition.start(); return; } catch (_) {} }
-        listening = false; btn.classList.remove('rec'); btn.innerHTML = '&#127908; Start Voice Dictation'; $('interim').innerText = '';
-      };
-      listening = true; recognition.start();
-      btn.classList.add('rec'); btn.innerHTML = '&#128308; Listening… (tap to stop)';
-    }
-
-    /* ---------- Letterhead PDF ---------- */
-    function loadLogo() {
-      const img = new Image();
-      img.onload = () => { try { const c = document.createElement('canvas'); c.width = img.width; c.height = img.height; c.getContext('2d').drawImage(img, 0, 0); logoData = c.toDataURL('image/png'); } catch (_) {} };
-      img.src = 'icon-192.png';
-    }
-
-    function buildPdf(note, p) {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-      const L = 15, R = 195, BOTTOM = 270;
-      let y;
-      function header() {
-        if (logoData) doc.addImage(logoData, 'PNG', L, 8, 20, 20);
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
-        doc.text('RAMAKRISHNA MISSION SEVA PRATISHTHAN', 105, 16, { align: 'center' });
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-        doc.text('Vivekananda Institute of Medical Sciences, Kolkata', 105, 22, { align: 'center' });
-        doc.text('IPD Clinical Progress Notes & Treatment Sheet (Ayushman Bharat PM-JAY)', 105, 27, { align: 'center' });
-        doc.line(L, 31, R, 31);
-        y = 39;
-      }
-      header();
-      doc.setFontSize(10.5);
-      const rows = [['Patient', p.name], ['MRD', p.mrd], ['Ward / Bed', (p.ward || '-') + ' / ' + (p.bed_no || '-')], ['Date', new Date(note.created_at || Date.now()).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })]];
-      rows.forEach(([k, v]) => { doc.setFont('helvetica', 'bold'); doc.text(k + ':', L, y); doc.setFont('helvetica', 'normal'); doc.text(String(v || '-'), L + 28, y); y += 6; });
-      doc.line(L, y, R, y); y += 8;
-      const secs = [['Subjective', note.subjective], ['Objective', note.objective], ['Assessment', note.assessment], ['Plan', note.plan]];
-      secs.forEach(([title, text]) => {
-        if (y > BOTTOM - 14) { doc.addPage(); header(); }
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(11.5); doc.text(title + ':', L, y); y += 6;
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
-        doc.splitTextToSize(text || 'N/A', R - L).forEach(line => {
-          if (y > BOTTOM) { doc.addPage(); header(); doc.setFont('helvetica', 'normal'); doc.setFontSize(11); }
-          doc.text(line, L, y); y += 5.5;
-        });
-        y += 5;
-      });
-      if (y > BOTTOM - 12) { doc.addPage(); header(); }
-      doc.setFontSize(10); doc.text('Signature: ____________________', R, Math.max(y + 8, 250), { align: 'right' });
-      const pages = doc.getNumberOfPages();
-      for (let i = 1; i <= pages; i++) {
-        doc.setPage(i); doc.setFontSize(9); doc.line(L, 281, R, 281);
-        doc.text('Generated: ' + new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }), L, 286);
-        doc.text('Page ' + i + ' of ' + pages, R, 286, { align: 'right' });
-      }
-      doc.save('IPD_Note_' + String(p.mrd).replace(/[^\w-]/g, '') + '.pdf');
-    }
-
-    function pdfFromForm() {
-      const p = sel(); if (!p) { setStatus('Please select a patient first.', false); return; }
-      const v = formValues();
-      if (!FIELDS.some(f => v[f])) { setStatus('Enter at least one SOAP field to print.', false); return; }
-      buildPdf({ ...v, created_at: new Date().toISOString() }, p);
-    }
-    function pdfFromNote(i) {
-      const p = sel(); if (p && notesCache[i]) buildPdf(notesCache[i], p);
-    }
-
     init();
-    window.addEventListener('pageshow', e => { if (e.persisted) init(); });
     if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
   </script>
 </body>
