@@ -29,7 +29,9 @@ const FIELDS = {
 const SYSTEM = `You sort a doctor's dictated or typed neonatal/pediatric ward note into fields.
 Rules:
 - Use ONLY information the doctor actually stated. Never invent, infer, calculate or add any value, diagnosis, dose or advice.
-- Keep the doctor's wording, numbers and units exactly; you may only fix obvious speech-recognition spelling of medical terms.
+- The text comes from speech recognition (Indian-accented English) in a neonatal/pediatric ward, so correct obvious mishearings using NICU knowledge. Examples: "free maturity"/"pre maturity" = prematurity; "pwp", "peep" = PEEP; "fio2", "fio225%" = FiO2 (so "fio225%" = FiO2 25%); "spy to", "spo2", "s p o 2" = SpO2; "BP 62 by 38" = BP 62/38; "ml part kg birthday", "ml per kg birthday", "ml per kg per day" = ml/kg/day; "with you in output" = urine output; "ebm" = EBM; "tpn" = TPN; "cxr" = CXR; "CRT less than 2 seconds" = CRT <2 sec.
+- Keep every number and unit exactly as spoken. Never guess a number.
+- If a phrase is unclear and you cannot confidently correct it, keep the original words and add " [?]" right after it so the doctor can check it.
 - If a field is not mentioned, return an empty string for it.
 - If something stated fits no field, put it in "other".
 - Reply with ONE JSON object only, no markdown, no commentary, with exactly these keys and string values:

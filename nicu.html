@@ -66,7 +66,7 @@
         <div><label>Birth weight</label><input id="birth_weight" placeholder="e.g. 1.45 kg"></div>
         <div><label>Admission weight</label><input id="admission_weight" placeholder="e.g. 1.40 kg"></div>
         <div><label>Current weight</label><input id="current_weight" placeholder="e.g. 1.52 kg"></div>
-        <div><label>Chart date</label><input type="date" id="chart_date"></div>
+        <div><label>Chart date (automatic)</label><input type="date" id="chart_date" disabled></div>
       </div>
     </div>
 
@@ -177,7 +177,7 @@
       ['demoCard','dictCard','fieldsCard','sigCard'].forEach(id => $(id).style.display = show);
       if (!p) return;
       $('autoInfo').innerHTML = `<strong>${esc(p.name)}</strong> | MRD ${esc(p.mrd)} | Ward ${esc(p.ward || '-')} | Bed ${esc(p.bed_no || '-')} | Unit ${esc(p.doctor_unit || '-')} | Admitted ${esc(p.admission_date || '-')}`;
-      DEMO.forEach(k => $(k).value = (k === 'ga' ? p.gestational_age : p[k]) || '');
+      DEMO.forEach(k => { const el = $(k); el.value = (k === 'ga' ? p.gestational_age : p[k]) || ''; el.disabled = !!el.value; });
       $('current_weight').value = ''; $('chart_date').value = today();
       SECTIONS.forEach(([k]) => $('f_' + k).value = ''); $('dictation').value = ''; markIdx(); $('aiStatus').innerText = ''; $('status').innerText = '';
     }
@@ -294,9 +294,11 @@
       const c = collect();
       if (!SECTIONS.some(([k]) => c.sections[k])) { status('Fill at least one section first.', false); return; }
       if (!sigImg && !profile && !confirm('No signature saved. Print without a signature?')) return;
+      if (SECTIONS.some(([k]) => c.sections[k].includes('[?]')) && !confirm('Some text is marked [?] (unclear). Remove the [?] after checking it. Print anyway?')) return;
       $('pdfBtn').disabled = true; let msg = '';
-      const demo = { dob: $('dob').value || null, sex: $('sex').value || null, gestational_age: $('ga').value.trim() || null, birth_weight: $('birth_weight').value.trim() || null, admission_weight: $('admission_weight').value.trim() || null };
-      const r1 = await supabaseClient.from('Patients').update(demo).eq('mrd', p.mrd);
+      const demo = {};
+      [['sex','sex'],['dob','dob'],['ga','gestational_age'],['birth_weight','birth_weight'],['admission_weight','admission_weight']].forEach(([id, col]) => { const el = $(id); if (!el.disabled && el.value.trim()) demo[col] = el.value.trim(); });
+      const r1 = Object.keys(demo).length ? await supabaseClient.from('Patients').update(demo).eq('mrd', p.mrd) : {};
       const sig = profile ? profile : (sigImg ? JSON.parse(localStorage.getItem(sigKey()) || '{}') : {});
       const r2 = await supabaseClient.from('nicu_charts').insert([{ mrd: String(p.mrd), chart_date: c.chart_date, data: { ...c.sections, current_weight: c.current_weight }, signed_by: (profile ? profile.name : $('docName').value.trim()) || null, author_email: userEmail }]);
       if (r1.error || r2.error) msg = 'PDF created, but saving failed: ' + ((r1.error || r2.error).message) + ' (run nicu_setup.sql in Supabase).';
@@ -333,7 +335,7 @@
           items.forEach((it, i) => {
             const col = i % 3, x = L + col * (W / 3);
             doc.setFont('helvetica', 'bold'); doc.text(it[0] + ':', x, y);
-            doc.setFont('helvetica', 'normal'); const lw = doc.getTextWidth(it[0] + ': ');
+            const lw = doc.getTextWidth(it[0] + ': '); doc.setFont('helvetica', 'normal');
             doc.text(doc.splitTextToSize(String(it[1]), W / 3 - lw - 2)[0], x + lw, y);
             if (col === 2 || i === items.length - 1) y += 6;
           });
