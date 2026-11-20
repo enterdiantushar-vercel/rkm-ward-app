@@ -75,12 +75,13 @@
       <div class="bar">
         <button type="button" id="micBtn" class="btn-mic" onclick="toggleVoice()">&#127908; Start Voice</button>
         <button type="button" id="aiBtn" class="btn-ai" onclick="sortWithAI()">Done &mdash; Sort with AI</button>
+        <button type="button" class="btn-alt" onclick="toggleBrowserVoice()">Backup voice</button>
       </div>
       <div id="interim"></div>
       <div class="info" style="margin:12px 0 0;"><b>Say these, in any order (green = captured):</b></div>
       <div id="idxList"></div>
       <textarea id="dictation" placeholder="Example: Baby is stable, no fever. On room air, SpO2 98%. HR 140, CRT 2 sec. Abdomen soft. Feeds EBM 8 ml 2 hourly, no vomiting. Continue antibiotics day 3. Parents counselled."></textarea>
-      <div class="info">When you stop the voice, the AI sorts the text into the fields below automatically. You can still check and correct every field.</div>
+      <div class="info">Do not say patient names or MRD numbers. When you stop recording, the text is typed here and the AI sorts it into the fields below automatically. You can still check and correct every field.</div>
       <div id="aiStatus"></div>
     </div>
 
@@ -198,7 +199,34 @@
     }
 
     /* ---------- voice ---------- */
-    function toggleVoice() {
+    let mediaRec = null, chunks = [], recStream = null, recTimer = null;
+    async function toggleVoice() {
+      const btn = $('micBtn'), st = $('aiStatus');
+      if (mediaRec && mediaRec.state === 'recording') { mediaRec.stop(); return; }
+      if (!navigator.mediaDevices || !window.MediaRecorder) { alert('Recording is not supported in this browser. Use Chrome, or the Backup voice button.'); return; }
+      try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
+      catch (e) { alert('Microphone permission denied. Allow microphone access and try again.'); return; }
+      chunks = []; mediaRec = new MediaRecorder(recStream);
+      mediaRec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+      mediaRec.onstop = async () => {
+        clearTimeout(recTimer); recStream.getTracks().forEach(t => t.stop());
+        btn.classList.remove('rec'); btn.innerHTML = '&#127908; Start Voice';
+        const blob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/webm' });
+        if (blob.size < 1500) { st.className = 'err'; st.innerText = 'Recording too short. Please try again.'; return; }
+        st.className = 'info'; st.innerText = 'Transcribing…';
+        try {
+          const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+          const { data } = await supabaseClient.auth.getSession();
+          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type }) });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed');
+          const f = $('dictation'); f.value += (f.value && !/\s$/.test(f.value) ? ' ' : '') + j.text;
+          if (j.text.trim()) sortWithAI(); else { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
+        } catch (e) { st.className = 'err'; st.innerText = 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
+      };
+      mediaRec.start(); btn.classList.add('rec'); btn.innerHTML = '&#128308; Recording… tap to stop';
+      recTimer = setTimeout(() => { if (mediaRec.state === 'recording') mediaRec.stop(); }, 120000);
+    }
+    function toggleBrowserVoice() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
       if (!SR) { alert('Speech recognition is not supported here. Please use Google Chrome.'); return; }
       const btn = $('micBtn');
