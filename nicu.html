@@ -206,19 +206,19 @@
       if (!navigator.mediaDevices || !window.MediaRecorder) { alert('Recording is not supported in this browser. Use Chrome, or the Backup voice button.'); return; }
       try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch (e) { alert('Microphone permission denied. Allow microphone access and try again.'); return; }
-      chunks = []; mediaRec = new MediaRecorder(recStream);
+      chunks = []; mediaRec = new MediaRecorder(recStream, { audioBitsPerSecond: 24000 });
       mediaRec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
       mediaRec.onstop = async () => {
         clearTimeout(recTimer); recStream.getTracks().forEach(t => t.stop());
         btn.classList.remove('rec'); btn.innerHTML = '&#127908; Start Voice';
         const blob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/webm' });
         if (blob.size < 1500) { st.className = 'err'; st.innerText = 'Recording too short. Please try again.'; return; }
-        st.className = 'info'; st.innerText = 'Transcribing…';
+        st.className = 'info'; st.innerText = 'Transcribing…'; window._t0 = Date.now();
         try {
           const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
           const { data } = await supabaseClient.auth.getSession();
           const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type }) });
-          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed');
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed'); window._tTrans = ((Date.now() - window._t0) / 1000).toFixed(1);
           const f = $('dictation'); f.value += (f.value && !/\s$/.test(f.value) ? ' ' : '') + j.text;
           if (j.text.trim()) sortWithAI(); else { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
         } catch (e) { st.className = 'err'; st.innerText = 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
@@ -253,7 +253,7 @@
     async function sortWithAI() {
       const text = $('dictation').value.trim(), st = $('aiStatus');
       if (!text) { st.className = 'err'; st.innerText = 'Type or speak something first.'; return; }
-      $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…';
+      $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…'; window._s0 = Date.now();
       try {
         const { data } = await supabaseClient.auth.getSession();
         const r = await fetch('/api/sort', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ text }) });
@@ -263,7 +263,7 @@
         SECTIONS.forEach(([k]) => { if (j.fields[k]) { $('f_' + k).value = j.fields[k]; n++; } });
         if (j.fields.current_weight) $('current_weight').value = j.fields.current_weight;
         markIdx();
-        st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing.';
+        st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing. [Transcribe ' + (window._tTrans || '-') + ' s, Sort ' + ((Date.now() - window._s0) / 1000).toFixed(1) + ' s]'; window._tTrans = null;
         $('fieldsCard').scrollIntoView({ behavior: 'smooth' });
       } catch (e) { st.className = 'err'; st.innerText = 'AI sorting failed: ' + e.message; }
       $('aiBtn').disabled = false;

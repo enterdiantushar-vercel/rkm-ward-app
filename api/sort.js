@@ -34,7 +34,7 @@ Rules:
 - If a phrase is unclear and you cannot confidently correct it, keep the original words and add " [?]" right after it so the doctor can check it.
 - If a field is not mentioned, return an empty string for it.
 - If something stated fits no field, put it in "other".
-- Reply with ONE JSON object only, no markdown, no commentary, with exactly these keys and string values:
+- Reply with ONE JSON object only, no markdown, no commentary. Include ONLY the keys that have content and leave out empty ones. Keys and their meaning:
 ${Object.entries(FIELDS).map(([k, v]) => `"${k}": ${v}`).join("\n")}`;
 
 module.exports = async (req, res) => {
