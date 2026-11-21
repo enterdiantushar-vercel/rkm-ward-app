@@ -45,7 +45,15 @@ module.exports = async (req, res) => {
     const j = await r.json();
     if (!r.ok) return res.status(502).json({ error: (j.err_msg || j.message || "Speech service error") });
     const alt = j.results && j.results.channels && j.results.channels[0] && j.results.channels[0].alternatives && j.results.channels[0].alternatives[0];
-    return res.status(200).json({ text: (alt && alt.transcript) || "" });
+    const text = (alt && alt.transcript) || "";
+    const out = { text };
+    if (req.body.sort && text.trim()) { // one-step: sort in the same request (saves a round trip)
+      try {
+        const prior = String(req.body.prior || "").slice(0, 6000);
+        out.fields = await require("./sort.js").sortText((prior ? prior + " " : "") + text);
+      } catch (e) { out.sortError = e.message; }
+    }
+    return res.status(200).json(out);
   } catch (e) {
     return res.status(500).json({ error: "Could not transcribe: " + e.message });
   }

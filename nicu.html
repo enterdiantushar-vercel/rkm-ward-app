@@ -213,14 +213,16 @@
         btn.classList.remove('rec'); btn.innerHTML = '&#127908; Start Voice';
         const blob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/webm' });
         if (blob.size < 1500) { st.className = 'err'; st.innerText = 'Recording too short. Please try again.'; return; }
-        st.className = 'info'; st.innerText = 'Transcribing…'; window._t0 = Date.now();
+        st.className = 'info'; st.innerText = 'Transcribing and sorting…'; window._t0 = Date.now();
         try {
           const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
           const { data } = await supabaseClient.auth.getSession();
-          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type }) });
+          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type, sort: true, prior: $('dictation').value }) });
           const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed'); window._tTrans = ((Date.now() - window._t0) / 1000).toFixed(1);
           const f = $('dictation'); f.value += (f.value && !/\s$/.test(f.value) ? ' ' : '') + j.text;
-          if (j.text.trim()) sortWithAI(); else { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
+          if (!j.text.trim()) { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
+          else if (j.fields) applyFields(j.fields);
+          else sortWithAI();
         } catch (e) { st.className = 'err'; st.innerText = 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
       };
       mediaRec.start(); btn.classList.add('rec'); btn.innerHTML = '&#128308; Recording… tap to stop';
@@ -250,6 +252,14 @@
     }
 
     /* ---------- AI sorting ---------- */
+    function applyFields(fields) {
+      const st = $('aiStatus'); let n = 0;
+      SECTIONS.forEach(([k]) => { if (fields[k]) { $('f_' + k).value = fields[k]; n++; } });
+      if (fields.current_weight) $('current_weight').value = fields.current_weight;
+      markIdx();
+      st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing. [Total ' + ((Date.now() - window._t0) / 1000).toFixed(1) + ' s]';
+      $('fieldsCard').scrollIntoView({ behavior: 'smooth' });
+    }
     async function sortWithAI() {
       const text = $('dictation').value.trim(), st = $('aiStatus');
       if (!text) { st.className = 'err'; st.innerText = 'Type or speak something first.'; return; }
