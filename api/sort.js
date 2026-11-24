@@ -3,7 +3,7 @@
 const SUPABASE_URL = "https://cqjqewlzxebszpnqhmev.supabase.co";
 const SUPABASE_KEY = "sb_publishable_rTd12RguCfNQYezz4febZA_xuIJW3OM";
 
-const FIELDS = {
+const FIELDS_NICU = {
   background: "Background / admission problem or diagnosis",
   current_problems: "Current problems",
   progress: "Progress in last 24 hours",
@@ -26,7 +26,7 @@ const FIELDS = {
   current_weight: "Current weight of the baby with unit"
 };
 
-const SYSTEM = `You sort a doctor's dictated or typed neonatal/pediatric ward note into fields.
+const SYSTEM_NICU = `You sort a doctor's dictated or typed neonatal/pediatric ward note into fields.
 Rules:
 - Use ONLY information the doctor actually stated. Never invent, infer, calculate or add any value, diagnosis, dose or advice.
 - The text comes from speech recognition (Indian-accented English) in a neonatal/pediatric ward, so correct obvious mishearings using NICU knowledge. Examples: "free maturity"/"pre maturity" = prematurity; "pwp", "peep" = PEEP; "fio2", "fio225%" = FiO2 (so "fio225%" = FiO2 25%); "spy to", "spo2", "s p o 2" = SpO2; "BP 62 by 38" = BP 62/38; "ml part kg birthday", "ml per kg birthday", "ml per kg per day" = ml/kg/day; "with you in output" = urine output; "ebm" = EBM; "tpn" = TPN; "cxr" = CXR; "CRT less than 2 seconds" = CRT <2 sec.
@@ -39,9 +39,45 @@ Rules:
 - If a field is not mentioned, return an empty string for it.
 - If something stated fits no field, put it in "other".
 - Reply with ONE JSON object only, no markdown, no commentary. Include ONLY the keys that have content and leave out empty ones. Keys and their meaning:
-${Object.entries(FIELDS).map(([k, v]) => `"${k}": ${v}`).join("\n")}`;
+${Object.entries(FIELDS_NICU).map(([k, v]) => `"${k}": ${v}`).join("\n")}`;
 
-async function sortText(text) {
+
+const FIELDS_ADULT = {
+  complaints: "Complaints and symptoms since last review",
+  vitals: "Vitals: temperature, pulse, BP, respiratory rate, SpO2 and any oxygen support",
+  grbs_io: "GRBS (blood sugar), intake, output, urine output",
+  general: "General condition, consciousness or GCS, pallor, icterus, edema",
+  cvs: "Cardiovascular examination",
+  rs: "Respiratory system examination",
+  abdomen: "Abdomen (per abdomen) examination",
+  cns: "Central nervous system examination",
+  local: "Local examination, surgical site, wound, drain",
+  reports: "New investigation reports: blood tests, ECG, imaging",
+  diagnosis: "Diagnosis or clinical impression",
+  medications: "Medications: drug, dose, route, frequency; antibiotics with day number",
+  fluids_diet: "IV fluids and diet",
+  icu_support: "Oxygen, ventilator, inotropes, sedation, lines and tubes (ICU / CCU)",
+  inv_advised: "Investigations advised",
+  nursing: "Nursing care, monitoring, precautions",
+  referral: "Referral or consultation",
+  plan: "Plan, further management, discharge plan",
+  communication: "Communication with relatives, consent",
+  other: "Anything stated that fits no other field"
+};
+
+const SYSTEM_ADULT = `You sort a doctor's dictated or typed note for an ADULT inpatient (general ward, ICU or CCU) into the fields of a hospital IPD progress note / treatment sheet.
+Rules:
+- Use ONLY information the doctor actually stated. Never invent, infer, calculate or add any value, diagnosis, dose or advice.
+- Keep the doctor's wording, numbers and units exactly. Never guess a number.
+- The text comes from speech recognition (Indian-accented English), so correct obvious mishearings using clinical knowledge. Examples: "grbs", "g r b s" = GRBS; "BP 120 by 80" = BP 120/80; "spy to", "spot 95" = SpO2 95%; "bd", "b d" = BD; "tds", "t d s" = TDS; "s o s" = SOS; "n p o" = NPO; "r t feed" = RT feed; "tab" = Tab.; "inj" = Inj.; "ecg" = ECG; "cbc" = CBC.
+- Placement hints: temperature, pulse, BP, RR, SpO2 go to vitals. Blood sugar, intake, output, urine output go to grbs_io. Heart sounds, murmurs go to cvs. Air entry, crepitations, rhonchi, wheeze go to rs. Soft, tender, distension, bowel sounds go to abdomen. Hb, TLC, platelets, urea, creatinine, sodium, potassium, LFT, CRP, ECG findings, X-ray, CT, USG results go to reports. Drug names with doses and orders to continue, stop or start a drug go to medications. Oxygen, ventilator settings, BiPAP, noradrenaline, sedation, central line, Foley, RT go to icu_support. Tests to be done go to inv_advised.
+- If a field is not mentioned, leave it out. If something stated fits no field, put it in "other".
+- When you can suggest a likely meaning but are not sure, write your best reading first, then the original words, like this: SpO2 95% [? heard: "spot 95"]. A bare group of numbers with no label that you cannot place goes into "other" with [?].
+- Reply with ONE JSON object only, no markdown, no commentary. Include ONLY the keys that have content. Keys and their meaning:
+${Object.entries(FIELDS_ADULT).map(([k, v]) => `"${k}": ${v}`).join("\\n")}`;
+
+async function sortText(text, chart) {
+  const FIELDS = chart === "adult" ? FIELDS_ADULT : FIELDS_NICU, SYSTEM = chart === "adult" ? SYSTEM_ADULT : SYSTEM_NICU;
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set in Vercel.");
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -67,7 +103,7 @@ const handler = async (req, res) => {
 
     const text = String((req.body && req.body.text) || "").slice(0, 8000);
     if (!text.trim()) return res.status(400).json({ error: "No text received" });
-    return res.status(200).json({ fields: await sortText(text) });
+    return res.status(200).json({ fields: await sortText(text, req.body && req.body.chart) });
   } catch (e) {
     return res.status(500).json({ error: "Could not process: " + e.message });
   }

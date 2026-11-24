@@ -46,7 +46,7 @@
 </head>
 <body>
   <div class="header">
-    <div><a href="ward.html">&larr; Ward Module</a><h1>NICU / Pediatric IPD Chart</h1></div>
+    <div><a href="ward.html">&larr; Ward Module</a><h1 id="chartTitle">IPD Chart</h1></div>
     <button class="btn-alt" onclick="logout()">Logout</button>
   </div>
 
@@ -61,11 +61,12 @@
       <div id="autoInfo" class="info" style="margin:0 0 12px;"></div>
       <div class="grid">
         <div><label>Sex</label><select id="sex"><option value=""></option><option>Male</option><option>Female</option></select></div>
-        <div><label>Date of birth</label><input type="date" id="dob"></div>
-        <div><label>GA at birth (weeks+days, e.g. 32+3)</label><input id="ga" placeholder="32+3"></div>
-        <div><label>Birth weight</label><input id="birth_weight" placeholder="e.g. 1.45 kg"></div>
-        <div><label>Admission weight</label><input id="admission_weight" placeholder="e.g. 1.40 kg"></div>
-        <div><label>Current weight</label><input id="current_weight" placeholder="e.g. 1.52 kg"></div>
+        <div class="tn"><label>Date of birth</label><input type="date" id="dob"></div>
+        <div class="tn"><label>GA at birth (weeks+days, e.g. 32+3)</label><input id="ga" placeholder="32+3"></div>
+        <div class="tn"><label>Birth weight</label><input id="birth_weight" placeholder="e.g. 1.45 kg"></div>
+        <div class="tn"><label>Admission weight</label><input id="admission_weight" placeholder="e.g. 1.40 kg"></div>
+        <div class="tn"><label>Current weight</label><input id="current_weight" placeholder="e.g. 1.52 kg"></div>
+        <div class="ta" style="display:none;"><label>Age</label><input id="age" placeholder="e.g. 54 years"></div>
         <div><label>Chart date (automatic)</label><input type="date" id="chart_date" disabled></div>
       </div>
     </div>
@@ -118,7 +119,7 @@
     const $ = id => document.getElementById(id);
     const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-    const SECTIONS = [
+    const NICU_SECTIONS = [
       ['background','Background / Admission problem or diagnosis'],
       ['current_problems','Current problems'],
       ['progress','Progress in last 24 hr'],
@@ -139,9 +140,46 @@
       ['plan','Plan'],
       ['other','Other notes']
     ];
+
+    const ADULT_SECTIONS = [
+      ['complaints','Complaints / symptoms since last review','COMPLAINT + EXAMINATION'],
+      ['vitals','Vitals: Temp, Pulse, BP, RR, SpO2 (with O2 support)','COMPLAINT + EXAMINATION'],
+      ['grbs_io','GRBS, intake / output, urine output','COMPLAINT + EXAMINATION'],
+      ['general','General condition, consciousness (GCS), pallor / icterus / edema','COMPLAINT + EXAMINATION'],
+      ['cvs','CVS','COMPLAINT + EXAMINATION'],
+      ['rs','Respiratory system (RS)','COMPLAINT + EXAMINATION'],
+      ['abdomen','Abdomen (P/A)','COMPLAINT + EXAMINATION'],
+      ['cns','CNS','COMPLAINT + EXAMINATION'],
+      ['local','Local / surgical site / wound / drain','COMPLAINT + EXAMINATION'],
+      ['reports','New investigation reports (blood, ECG, imaging)','COMPLAINT + EXAMINATION'],
+      ['diagnosis','Diagnosis / impression','ASSESSMENT'],
+      ['medications','Medications (drug, dose, route, frequency; antibiotics with day)','ADVICE / TREATMENT'],
+      ['fluids_diet','IV fluids and diet','ADVICE / TREATMENT'],
+      ['icu_support','Oxygen / ventilator / inotropes / sedation / lines and tubes','ADVICE / TREATMENT'],
+      ['inv_advised','Investigations advised','ADVICE / TREATMENT'],
+      ['nursing','Nursing care and monitoring','ADVICE / TREATMENT'],
+      ['referral','Referral / consultation','ADVICE / TREATMENT'],
+      ['plan','Plan / further management / discharge plan','ADVICE / TREATMENT'],
+      ['communication','Communication with relatives / consent','ADVICE / TREATMENT'],
+      ['other','Other notes','ADVICE / TREATMENT']
+    ];
+    let SECTIONS = NICU_SECTIONS;
     $('idxList').innerHTML = SECTIONS.filter(x => x[0] !== 'other').map(([k, l], i) => `<span id="i_${k}">${i + 1}. ${esc(l)}</span>`).join('') + '<span id="i_cw">Current weight</span>';
-    function markIdx() { SECTIONS.forEach(([k]) => { const e = $('i_' + k); if (e) e.classList.toggle('done', !!$('f_' + k).value.trim()); }); $('i_cw').classList.toggle('done', !!$('current_weight').value.trim()); }
-    const DEMO = ['sex','dob','ga','birth_weight','admission_weight'];
+    function markIdx() { SECTIONS.forEach(([k]) => { const e = $('i_' + k); if (e) e.classList.toggle('done', !!$('f_' + k).value.trim()); }); if ($('i_cw')) $('i_cw').classList.toggle('done', !!$('current_weight').value.trim()); }
+    const COLMAP = { ga: 'gestational_age', age: 'age_text' };
+    let TEMPLATE = 'nicu', DEMO = ['sex','dob','ga','birth_weight','admission_weight'];
+    const NICU_HINT = "Example: Baby is stable, no fever. On room air, SpO2 98%. HR 140, CRT 2 sec. Abdomen soft. Feeds EBM 8 ml 2 hourly, no vomiting. Continue antibiotics day 3. Parents counselled.";
+    const ADULT_HINT = "Example: Patient afebrile, no chest pain. Pulse 82, BP 120/80, SpO2 98% on room air. Chest clear, abdomen soft. Hb 10.2, creatinine 1.1. Continue Inj. ceftriaxone 1 g BD, day 3. Plan: repeat CBC tomorrow.";
+    function setTemplate(t) {
+      TEMPLATE = t; SECTIONS = t === 'nicu' ? NICU_SECTIONS : ADULT_SECTIONS;
+      DEMO = t === 'nicu' ? ['sex','dob','ga','birth_weight','admission_weight'] : ['sex','age'];
+      document.querySelectorAll('.tn').forEach(e => e.style.display = t === 'nicu' ? '' : 'none');
+      document.querySelectorAll('.ta').forEach(e => e.style.display = t === 'nicu' ? 'none' : '');
+      $('chartTitle').innerText = t === 'nicu' ? 'NICU / PICU IPD Chart' : 'IPD Chart (General Ward / ICU / CCU)';
+      $('idxList').innerHTML = SECTIONS.filter(x => x[0] !== 'other').map(([k, l], i) => `<span id="i_${k}">${i + 1}. ${esc(l)}</span>`).join('') + (t === 'nicu' ? '<span id="i_cw">Current weight</span>' : '');
+      $('fields').innerHTML = SECTIONS.map(([k, l, g], i) => (g && (i === 0 || SECTIONS[i - 1][2] !== g) ? `<h4 style="margin:14px 0 8px;color:#26A69A;">${esc(g)}</h4>` : '') + `<div class="fg"><label for="f_${k}">${esc(l)}</label><textarea id="f_${k}" rows="2"></textarea></div>`).join('');
+      $('dictation').placeholder = t === 'nicu' ? NICU_HINT : ADULT_HINT;
+    }
 
     let patients = [], userEmail = "", logoData = null, recognition = null, listening = false, sigImg = null, drawn = false, timer;
     const sel = () => patients.find(p => String(p.mrd) === $('patientSelect').value);
@@ -177,8 +215,9 @@
       const p = sel(), show = p ? 'block' : 'none';
       ['demoCard','dictCard','fieldsCard','sigCard'].forEach(id => $(id).style.display = show);
       if (!p) return;
+      setTemplate(/^(NICU|PICU)/i.test(p.ward || '') ? 'nicu' : 'adult');
       $('autoInfo').innerHTML = `<strong>${esc(p.name)}</strong> | MRD ${esc(p.mrd)} | Ward ${esc(p.ward || '-')} | Bed ${esc(p.bed_no || '-')} | Unit ${esc(p.doctor_unit || '-')} | Admitted ${esc(p.admission_date || '-')}`;
-      DEMO.forEach(k => { const el = $(k); el.value = (k === 'ga' ? p.gestational_age : p[k]) || ''; el.disabled = !!el.value; });
+      DEMO.forEach(k => { const el = $(k); el.value = p[COLMAP[k] || k] || ''; el.disabled = !!el.value; });
       $('current_weight').value = ''; $('chart_date').value = today();
       SECTIONS.forEach(([k]) => $('f_' + k).value = ''); $('dictation').value = ''; markIdx(); $('aiStatus').innerText = ''; $('status').innerText = '';
     }
@@ -217,7 +256,7 @@
         try {
           const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
           const { data } = await supabaseClient.auth.getSession();
-          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type, sort: true, prior: $('dictation').value }) });
+          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type, sort: true, chart: TEMPLATE, prior: $('dictation').value }) });
           const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed'); window._tTrans = ((Date.now() - window._t0) / 1000).toFixed(1);
           const f = $('dictation'); f.value += (f.value && !/\s$/.test(f.value) ? ' ' : '') + j.text;
           if (!j.text.trim()) { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
@@ -266,7 +305,7 @@
       $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…'; window._s0 = Date.now();
       try {
         const { data } = await supabaseClient.auth.getSession();
-        const r = await fetch('/api/sort', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ text }) });
+        const r = await fetch('/api/sort', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ text, chart: TEMPLATE }) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || 'AI request failed');
         let n = 0;
@@ -335,10 +374,10 @@
       if (SECTIONS.some(([k]) => c.sections[k].includes('[?')) && !confirm('Some text is marked [?] (unclear). Remove the [?] after checking it. Print anyway?')) return;
       $('pdfBtn').disabled = true; let msg = '';
       const demo = {};
-      [['sex','sex'],['dob','dob'],['ga','gestational_age'],['birth_weight','birth_weight'],['admission_weight','admission_weight']].forEach(([id, col]) => { const el = $(id); if (!el.disabled && el.value.trim()) demo[col] = el.value.trim(); });
+      DEMO.map(id => [id, COLMAP[id] || id]).forEach(([id, col]) => { const el = $(id); if (!el.disabled && el.value.trim()) demo[col] = el.value.trim(); });
       const r1 = Object.keys(demo).length ? await supabaseClient.from('Patients').update(demo).eq('mrd', p.mrd) : {};
       const sig = profile ? profile : (sigImg ? JSON.parse(localStorage.getItem(sigKey()) || '{}') : {});
-      const r2 = await supabaseClient.from('nicu_charts').insert([{ mrd: String(p.mrd), chart_date: c.chart_date, data: { ...c.sections, current_weight: c.current_weight }, signed_by: (profile ? profile.name : $('docName').value.trim()) || null, author_email: userEmail }]);
+      const r2 = await supabaseClient.from('nicu_charts').insert([{ mrd: String(p.mrd), chart_date: c.chart_date, data: { ...c.sections, current_weight: c.current_weight, chart_type: TEMPLATE }, signed_by: (profile ? profile.name : $('docName').value.trim()) || null, author_email: userEmail }]);
       if (r1.error || r2.error) msg = 'PDF created, but saving failed: ' + ((r1.error || r2.error).message) + ' (run nicu_setup.sql in Supabase).';
       Object.assign(p, demo);
       const out = buildPdf(p, c, sig);
@@ -363,12 +402,13 @@
           if (logoData) doc.addImage(logoData, 'PNG', L + 3, 12, 22, 22);
           doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.text('Ramakrishna Mission Seva Pratishthan', 105, 19, { align: 'center' });
           doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.text('99, Sarat Bose Road, Kolkata - 700 026', 105, 25, { align: 'center' });
-          doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text('IPD PROGRESS NOTE / TREATMENT SHEET (NICU / PEDIATRIC)', 105, 32, { align: 'center' });
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.text(TEMPLATE === 'nicu' ? 'IPD PROGRESS NOTE / TREATMENT SHEET (NICU / PEDIATRIC)' : 'IPD PROGRESS NOTE / TREATMENT SHEET', 105, 32, { align: 'center' });
           y = 42;
-          const items = [['Name', p.name], ['MRD No.', p.mrd], ['Bed No.', p.bed_no], ['Ward', p.ward], ['Unit', p.doctor_unit], ['Sex', p.sex],
+          const itemsAll = [['Name', p.name], ['MRD No.', p.mrd], ['Bed No.', p.bed_no], ['Ward', p.ward], ['Unit', p.doctor_unit], ['Sex', p.sex],
             ['DOB', fdate(p.dob)], ['Age', d.age], ['GA', p.gestational_age ? p.gestational_age + ' wk' : ''], ['CGA', d.cga],
             ['Birth wt', p.birth_weight], ['Admission wt', p.admission_weight], ['Current wt', c.current_weight],
-            ['Date', fdate(c.chart_date)], ['Date of admission', fdate(p.admission_date)]].filter(i => i[1]);
+            ['Date', fdate(c.chart_date)], ['Date of admission', fdate(p.admission_date)]];
+          const items = (TEMPLATE === 'nicu' ? itemsAll : [['Name', p.name], ['MRD No.', p.mrd], ['Bed No.', p.bed_no], ['Ward', p.ward], ['Unit', p.doctor_unit], ['Age', p.age_text], ['Sex', p.sex], ['Date', fdate(c.chart_date)], ['Date of admission', fdate(p.admission_date)]]).filter(i => i[1]);
           doc.setFontSize(9.5);
           items.forEach((it, i) => {
             const col = i % 3, x = L + col * (W / 3);
@@ -383,8 +423,10 @@
         }
       }
       head(true);
-      SECTIONS.forEach(([k, label]) => {
+      let lastGrp = '';
+      SECTIONS.forEach(([k, label, grp]) => {
         const text = c.sections[k]; if (!text) return;
+        if (grp && grp !== lastGrp) { if (y + 14 > BOTTOM) { doc.addPage(); head(false); } doc.setFont('helvetica', 'bold'); doc.setFontSize(10.5); doc.setFillColor(232, 244, 243); doc.rect(L, y - 4.5, W, 7, 'F'); doc.text(grp, L + 2, y); y += 8; lastGrp = grp; }
         const lines = doc.splitTextToSize(text, W - 4);
         if (y + 12 > BOTTOM) { doc.addPage(); head(false); }
         doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.text(label, L, y); y += 5;

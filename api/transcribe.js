@@ -4,7 +4,7 @@
 const SUPABASE_URL = "https://cqjqewlzxebszpnqhmev.supabase.co";
 const SUPABASE_KEY = "sb_publishable_rTd12RguCfNQYezz4febZA_xuIJW3OM";
 
-const TERMS = [
+const TERMS_NICU = [
   "PEEP","FiO2","SpO2","CPAP","HFNC","NIV","ventilator","surfactant","caffeine","CRT","EBM","TPN","OGT","NG feeds",
   "phototherapy","bilirubin","CRP","WBC","platelets","hemogram","hemoglobin","creatinine","sodium","potassium","calcium",
   "dextrose","GIR","urine output","ml/kg/day","antibiotics","ampicillin","gentamicin","amikacin","cefotaxime","meropenem",
@@ -17,8 +17,20 @@ const TERMS = [
   "heart rate","respiratory rate","blood pressure","capillary refill time"
 ];
 
-async function deepgram(buf, mime, model) {
-  const qs = ["model=" + model, "language=en", "smart_format=true", "punctuate=true"].concat(TERMS.map(t => "keyterm=" + encodeURIComponent(t))).join("&");
+
+const TERMS_ADULT = [
+  "GRBS","ECG","troponin","creatinine","urea","hemoglobin","TLC","platelets","CRP","LFT","RFT","sodium","potassium",
+  "GCS","pallor","icterus","edema","tachycardia","bradycardia","crepitations","rhonchi","wheeze","bowel sounds",
+  "hepatomegaly","splenomegaly","ascites","Foley catheter","RT feed","central line","ventilator","BiPAP","CPAP",
+  "noradrenaline","dopamine","dobutamine","midazolam","fentanyl","pantoprazole","ceftriaxone","piperacillin","tazobactam",
+  "meropenem","metronidazole","paracetamol","ondansetron","insulin","heparin","enoxaparin","aspirin","clopidogrel",
+  "atorvastatin","furosemide","normal saline","Ringer lactate","dextrose","NPO","SOS","stat","BD","TDS","SpO2","room air",
+  "blood pressure","pulse","respiratory rate","temperature","chest X-ray","CT scan","ultrasound","post operative day",
+  "dressing","drain","suture removal","discharge","antibiotics","day three","day five"
+];
+
+async function deepgram(buf, mime, model, terms) {
+  const qs = ["model=" + model, "language=en", "smart_format=true", "punctuate=true"].concat(terms.map(t => "keyterm=" + encodeURIComponent(t))).join("&");
   return fetch("https://api.deepgram.com/v1/listen?" + qs, {
     method: "POST",
     headers: { Authorization: "Token " + process.env.DEEPGRAM_API_KEY, "Content-Type": mime || "audio/webm" },
@@ -39,9 +51,11 @@ module.exports = async (req, res) => {
     if (!b64 || b64.length > 4000000) return res.status(400).json({ error: "Audio missing or too long (max about 2 minutes)." });
     const buf = Buffer.from(b64, "base64");
     const mime = String((req.body && req.body.mime) || "audio/webm").split(";")[0];
+    const chart = req.body && req.body.chart === "adult" ? "adult" : "nicu";
+    const terms = chart === "adult" ? TERMS_ADULT : TERMS_NICU;
 
-    let r = await deepgram(buf, mime, process.env.DEEPGRAM_MODEL || "nova-3-medical");
-    if (!r.ok && r.status === 400) r = await deepgram(buf, mime, "nova-3"); // fallback if the medical model/options are rejected
+    let r = await deepgram(buf, mime, process.env.DEEPGRAM_MODEL || "nova-3-medical", terms);
+    if (!r.ok && r.status === 400) r = await deepgram(buf, mime, "nova-3", terms); // fallback if the medical model/options are rejected
     const j = await r.json();
     if (!r.ok) return res.status(502).json({ error: (j.err_msg || j.message || "Speech service error") });
     const alt = j.results && j.results.channels && j.results.channels[0] && j.results.channels[0].alternatives && j.results.channels[0].alternatives[0];
@@ -50,7 +64,7 @@ module.exports = async (req, res) => {
     if (req.body.sort && text.trim()) { // one-step: sort in the same request (saves a round trip)
       try {
         const prior = String(req.body.prior || "").slice(0, 6000);
-        out.fields = await require("./sort.js").sortText((prior ? prior + " " : "") + text);
+        out.fields = await require("./sort.js").sortText((prior ? prior + " " : "") + text, chart);
       } catch (e) { out.sortError = e.message; }
     }
     return res.status(200).json(out);
