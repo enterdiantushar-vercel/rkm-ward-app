@@ -332,7 +332,7 @@
       const c = collect();
       if (!SECTIONS.some(([k]) => c.sections[k])) { status('Fill at least one section first.', false); return; }
       if (!sigImg && !profile && !confirm('No signature saved. Print without a signature?')) return;
-      if (SECTIONS.some(([k]) => c.sections[k].includes('[?]')) && !confirm('Some text is marked [?] (unclear). Remove the [?] after checking it. Print anyway?')) return;
+      if (SECTIONS.some(([k]) => c.sections[k].includes('[?')) && !confirm('Some text is marked [?] (unclear). Remove the [?] after checking it. Print anyway?')) return;
       $('pdfBtn').disabled = true; let msg = '';
       const demo = {};
       [['sex','sex'],['dob','dob'],['ga','gestational_age'],['birth_weight','birth_weight'],['admission_weight','admission_weight']].forEach(([id, col]) => { const el = $(id); if (!el.disabled && el.value.trim()) demo[col] = el.value.trim(); });
