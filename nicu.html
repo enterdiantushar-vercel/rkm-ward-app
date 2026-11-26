@@ -35,7 +35,7 @@
     .fg.flag .fmic { background:#F9A825; color:#fff; border-color:#F9A825; }
     #busy { position:fixed; inset:0; background:rgba(255,255,255,.9); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:20px; }
     #fluid { transform-box:fill-box; transform-origin:bottom; }
-    #busy.timed #fluid { animation:drain var(--d, 12000ms) linear forwards; }
+    #busy.timed #fluid { animation:drain var(--d, 20000ms) linear forwards; }
     #busy:not(.timed) #fluid { animation:slosh 2s ease-in-out infinite alternate; }
     @keyframes drain { from { transform:scaleY(1); } to { transform:scaleY(0); } }
     @keyframes slosh { from { transform:scaleY(1); } to { transform:scaleY(.88); } }
@@ -205,9 +205,9 @@
     function flagCheck() { SECTIONS.forEach(([k]) => { const g = $('g_' + k), f = $('f_' + k); if (g && f) g.classList.toggle('flag', f.value.includes('[?')); }); }
     let busyT = null, busyI = null;
     function showBusy(msg, ms, onTimeout) {
-      const b = $('busy'), limit = ms === undefined ? 12000 : ms;
+      const b = $('busy'), limit = ms === undefined ? 20000 : ms;
       $('busyMsg').innerText = msg; b.classList.toggle('timed', limit > 0);
-      b.style.setProperty('--d', (limit || 12000) + 'ms');
+      b.style.setProperty('--d', (limit || 20000) + 'ms');
       const f = $('fluid'); f.style.animation = 'none'; void f.getBoundingClientRect(); f.style.animation = '';
       b.style.display = 'flex'; clearTimeout(busyT); clearInterval(busyI);
       const t0 = Date.now(), tm = $('busyTimer');
@@ -310,12 +310,12 @@
         await onBlob(blob);
       };
       mediaRec.start(); btn.classList.add('rec'); btn.innerHTML = recHtml;
-      recTimer = setTimeout(() => { if (mediaRec.state === 'recording') mediaRec.stop(); }, 120000);
+      recTimer = setTimeout(() => { if (mediaRec.state === 'recording') mediaRec.stop(); }, 200000);
     }
     function toggleVoice() {
       const st = $('aiStatus');
       recordAudio($('micBtn'), '&#127908; Start Voice', '&#128308; Recording… tap to stop', async blob => {
-        st.className = 'info'; st.innerText = 'Transcribing and sorting…'; window._t0 = Date.now(); const ac = new AbortController(); showBusy('Transcribing and sorting… please wait', 12000, () => ac.abort());
+        st.className = 'info'; st.innerText = 'Transcribing and sorting…'; window._t0 = Date.now(); const ac = new AbortController(); showBusy('Transcribing and sorting… please wait', 20000, () => ac.abort());
         try {
           const b64 = await blobToB64(blob);
           const { data } = await supabaseClient.auth.getSession();
@@ -325,14 +325,14 @@
           if (!j.text.trim()) { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
           else if (j.fields) applyFields(j.fields, j.ms);
           else await sortWithAI();
-        } catch (e) { st.className = 'err'; st.innerText = e.name === 'AbortError' ? 'Took longer than 12 seconds. Check the network and record again, or type the note.' : 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
+        } catch (e) { st.className = 'err'; st.innerText = e.name === 'AbortError' ? 'Took longer than 20 seconds. Check the network and record again, or type the note.' : 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
         finally { hideBusy(); }
       }, () => { st.className = 'err'; st.innerText = 'Recording too short. Please try again.'; });
     }
     function voiceField(k) {
       const label = (SECTIONS.find(x => x[0] === k) || [k, k])[1];
       recordAudio($('m_' + k), '&#127908; Speak', '&#128308; Stop', async blob => {
-        const ac = new AbortController(); showBusy('Updating "' + label + '"… please wait', 12000, () => ac.abort());
+        const ac = new AbortController(); showBusy('Updating "' + label + '"… please wait', 20000, () => ac.abort());
         try {
           const b64 = await blobToB64(blob);
           const { data } = await supabaseClient.auth.getSession();
@@ -341,7 +341,7 @@
           const v = ((j.fields && j.fields[k]) || j.text || '').trim();
           if (!v) alert('No speech detected. Please try again.');
           else { $('f_' + k).value = v; markIdx(); }
-        } catch (e) { alert(e.name === 'AbortError' ? 'Took longer than 12 seconds. Check the network and try again, or type this box.' : 'Could not update this box: ' + e.message + ' (you can type instead).'); }
+        } catch (e) { alert(e.name === 'AbortError' ? 'Took longer than 20 seconds. Check the network and try again, or type this box.' : 'Could not update this box: ' + e.message + ' (you can type instead).'); }
         finally { hideBusy(); }
       });
     }
@@ -380,7 +380,7 @@
     async function sortWithAI() {
       const text = $('dictation').value.trim(), st = $('aiStatus');
       if (!text) { st.className = 'err'; st.innerText = 'Type or speak something first.'; return; }
-      $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…'; window._s0 = Date.now(); const ac = new AbortController(); showBusy('Sorting with AI… please wait', 12000, () => ac.abort());
+      $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…'; window._s0 = Date.now(); const ac = new AbortController(); showBusy('Sorting with AI… please wait', 20000, () => ac.abort());
       try {
         const { data } = await supabaseClient.auth.getSession();
         const r = await fetch('/api/sort', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ text, chart: TEMPLATE }), signal: ac.signal });
@@ -392,7 +392,7 @@
         markIdx();
         st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing. [Transcribe ' + (window._tTrans || '-') + ' s, Sort ' + ((Date.now() - window._s0) / 1000).toFixed(1) + ' s]'; window._tTrans = null;
         $('fieldsCard').scrollIntoView({ behavior: 'smooth' });
-      } catch (e) { st.className = 'err'; st.innerText = e.name === 'AbortError' ? 'Took longer than 12 seconds. Check the network and press Done again, or fill the boxes by typing.' : 'AI sorting failed: ' + e.message; }
+      } catch (e) { st.className = 'err'; st.innerText = e.name === 'AbortError' ? 'Took longer than 20 seconds. Check the network and press Done again, or fill the boxes by typing.' : 'AI sorting failed: ' + e.message; }
       $('aiBtn').disabled = false; hideBusy();
     }
 
