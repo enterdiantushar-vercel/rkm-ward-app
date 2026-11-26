@@ -34,7 +34,7 @@ Rules:
 - More mishearings: "a5", "pwp 5", "p 5" near FiO2 or SpO2 usually = PEEP 5; "spot 95", "spy to 95" = SpO2 95%; "if i go to", "if i o two", "f i o" = FiO2; "discount", "dextrous" = dextrose; "antivirus" in a plan = antibiotics [? antibiotics]; "tennis to" or "plan to" before treatment advice = Plan; "crpc", "c r p" = CRP; "kg birthday", "particle birthday" after ml = ml/kg/day; "with you do not put" = urine output.
 - Doctors may say full words: "oxygen saturation" = SpO2, "heart rate" = HR, "respiratory rate" = RR, "capillary refill time" = CRT, "blood pressure" = BP, "positive end expiratory pressure" = PEEP. Use the standard abbreviation.
 - Placement hints: RR, SpO2, PEEP, PIP, FiO2, ventilator, CPAP, HFNC, room air, blood gas, chest X-ray go to respiration. HR, CRT, BP, pulses, heart sounds go to cvs. WBC, platelets, Hb, CRP, sodium, potassium, creatinine go to investigations. Bilirubin, jaundice, phototherapy go to hematology. Orders such as continue, stop or start a drug go to plan.
-- When you can suggest a likely meaning but are not sure, write your best reading first, then the original words, like this: FiO2 25% [? heard: "if i go to 25%"]. A bare group of numbers with no label that you cannot place goes into "other" with [?].
+- When a heard word is unclear: correct it ONLY if it is one of the well-known mishearings above or clearly the only sensible reading; then write the corrected form followed by what you heard, like this: FiO2 25% [? heard: "if i go to 25%"]. If you cannot tell which lab test, drug or term was meant, do NOT choose one: keep exactly what you heard and mark it, like this: Betting 1.1 [? unclear word, heard "Betting"]. Never pick between several possible tests, drugs or diagnoses on your own. A bare group of numbers with no label that you cannot place goes into "other" with [?].
 - If a phrase is unclear and you cannot confidently correct it, keep the original words and add " [?]" right after it so the doctor can check it.
 - If a field is not mentioned, return an empty string for it.
 - If something stated fits no field, put it in "other".
@@ -69,15 +69,16 @@ const SYSTEM_ADULT = `You sort a doctor's dictated or typed note for an ADULT in
 Rules:
 - Use ONLY information the doctor actually stated. Never invent, infer, calculate or add any value, diagnosis, dose or advice.
 - Keep the doctor's wording, numbers and units exactly. Never guess a number.
-- The text comes from speech recognition (Indian-accented English), so correct obvious mishearings using clinical knowledge. Examples: "grbs", "g r b s" = GRBS; "BP 120 by 80" = BP 120/80; "spy to", "spot 95" = SpO2 95%; "bd", "b d" = BD; "tds", "t d s" = TDS; "s o s" = SOS; "n p o" = NPO; "r t feed" = RT feed; "tab" = Tab.; "inj" = Inj.; "ecg" = ECG; "cbc" = CBC.
+- The text comes from speech recognition (Indian-accented English), so correct obvious mishearings using clinical knowledge. Examples: "grbs", "g r b s" = GRBS; "BP 120 by 80" = BP 120/80; "spy to", "spot 95" = SpO2 95%; "bd", "b d" = BD; "tds", "t d s" = TDS; "s o s" = SOS; "n p o" = NPO; "r t feed" = RT feed; "tab" = Tab.; "inj" = Inj.; "ecg" = ECG; "cbc" = CBC; "septioxane", "ceftrioxone", "sef tri axone" = ceftriaxone.
 - Placement hints: temperature, pulse, BP, RR, SpO2 go to vitals. Blood sugar, intake, output, urine output go to grbs_io. Heart sounds, murmurs go to cvs. Air entry, crepitations, rhonchi, wheeze go to rs. Soft, tender, distension, bowel sounds go to abdomen. Hb, TLC, platelets, urea, creatinine, sodium, potassium, LFT, CRP, ECG findings, X-ray, CT, USG results go to reports. Drug names with doses and orders to continue, stop or start a drug go to medications. Oxygen, ventilator settings, BiPAP, noradrenaline, sedation, central line, Foley, RT go to icu_support. Tests to be done go to inv_advised.
 - If a field is not mentioned, leave it out. If something stated fits no field, put it in "other".
-- When you can suggest a likely meaning but are not sure, write your best reading first, then the original words, like this: SpO2 95% [? heard: "spot 95"]. A bare group of numbers with no label that you cannot place goes into "other" with [?].
+- When a heard word is unclear: correct it ONLY if it is one of the well-known mishearings above or clearly the only sensible reading; then write the corrected form followed by what you heard, like this: FiO2 25% [? heard: "if i go to 25%"]. If you cannot tell which lab test, drug or term was meant, do NOT choose one: keep exactly what you heard and mark it, like this: Betting 1.1 [? unclear word, heard "Betting"]. Never pick between several possible tests, drugs or diagnoses on your own. A bare group of numbers with no label that you cannot place goes into "other" with [?].
 - Reply with ONE JSON object only, no markdown, no commentary. Include ONLY the keys that have content. Keys and their meaning:
-${Object.entries(FIELDS_ADULT).map(([k, v]) => `"${k}": ${v}`).join("\\n")}`;
+${Object.entries(FIELDS_ADULT).map(([k, v]) => `"${k}": ${v}`).join("\n")}`;
 
-async function sortText(text, chart) {
-  const FIELDS = chart === "adult" ? FIELDS_ADULT : FIELDS_NICU, SYSTEM = chart === "adult" ? SYSTEM_ADULT : SYSTEM_NICU;
+async function sortText(text, chart, onlyKey) {
+  const FIELDS = chart === "adult" ? FIELDS_ADULT : FIELDS_NICU, SYSTEM0 = chart === "adult" ? SYSTEM_ADULT : SYSTEM_NICU;
+  const SYSTEM = onlyKey && FIELDS[onlyKey] ? SYSTEM0 + `\n- IMPORTANT: The doctor is now dictating ONLY the content of ONE field: "${onlyKey}" (${FIELDS[onlyKey]}). Put everything into that single key, cleaned by the rules above, and use no other key.` : SYSTEM0;
   if (!process.env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not set in Vercel.");
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -89,7 +90,7 @@ async function sortText(text, chart) {
   const out = (j.content || []).map(b => b.text || "").join("");
   const parsed = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1));
   const fields = {};
-  Object.keys(FIELDS).forEach(k => { if (typeof parsed[k] === "string" && parsed[k].trim()) fields[k] = parsed[k].trim(); });
+  Object.keys(FIELDS).filter(k => !onlyKey || k === onlyKey).forEach(k => { if (typeof parsed[k] === "string" && parsed[k].trim()) fields[k] = parsed[k].trim(); });
   return fields;
 }
 

@@ -27,6 +27,23 @@
     .grid { display:grid; grid-template-columns:1fr; gap:12px; }
     @media (min-width:640px) { .grid { grid-template-columns:repeat(3,1fr); } }
     .fg { margin-bottom:12px; }
+    .frow { display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:4px; }
+    .frow label { margin:0; }
+    .fmic { background:#fff; color:#E76F51; border:1.5px solid #F2B8A8; padding:4px 10px; min-height:32px; font-size:13px; border-radius:16px; white-space:nowrap; }
+    .fmic.rec { background:#D90429; color:#fff; border-color:#D90429; animation:pulse 1.4s infinite; }
+    .fg.flag textarea { border-color:#F9A825; background:#FFF8E1; }
+    .fg.flag .fmic { background:#F9A825; color:#fff; border-color:#F9A825; }
+    #busy { position:fixed; inset:0; background:rgba(255,255,255,.9); z-index:9999; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; text-align:center; padding:20px; }
+    #fluid { transform-box:fill-box; transform-origin:bottom; }
+    #busy.timed #fluid { animation:drain var(--d, 12000ms) linear forwards; }
+    #busy:not(.timed) #fluid { animation:slosh 2s ease-in-out infinite alternate; }
+    @keyframes drain { from { transform:scaleY(1); } to { transform:scaleY(0); } }
+    @keyframes slosh { from { transform:scaleY(1); } to { transform:scaleY(.88); } }
+    .drop { animation:drip 1s ease-in infinite; }
+    @keyframes drip { 0% { transform:translateY(0); opacity:1; } 85% { transform:translateY(18px); opacity:1; } 100% { transform:translateY(18px); opacity:0; } }
+    #busyTimer { font-size:36px; font-weight:700; color:#26A69A; min-height:44px; }
+    #busyMsg { font-size:19px; font-weight:600; color:#263238; }
+    @keyframes spin { to { transform:rotate(360deg); } }
     button { background:var(--sky); color:#fff; border:0; padding:11px 18px; border-radius:8px; font-size:15px; font-weight:500; cursor:pointer; min-height:44px; }
     button:disabled { opacity:.6; cursor:default; }
     .btn-mic { background:#E76F51; } .btn-mic.rec { background:#D90429; animation:pulse 1.4s infinite; }
@@ -88,6 +105,7 @@
 
     <div class="card" id="fieldsCard" style="display:none;">
       <h3>2. Check the sorted fields (empty ones are left out of the PDF)</h3>
+      <div class="info" style="margin:-6px 0 8px;">Amber box = unclear word marked [?]. Tap &#127908; on any box to say it again, or type to correct it.</div>
       <div id="fields"></div>
     </div>
 
@@ -110,6 +128,24 @@
       </div>
       <div id="status"></div>
     </div>
+  </div>
+
+  <div id="busy">
+    <svg viewBox="0 0 160 250" width="140" height="220" aria-hidden="true">
+      <defs><clipPath id="bagclip"><rect x="30" y="44" width="100" height="128" rx="18"/></clipPath></defs>
+      <line x1="80" y1="0" x2="80" y2="26" stroke="#90A4AE" stroke-width="4"/>
+      <circle cx="80" cy="30" r="7" fill="none" stroke="#90A4AE" stroke-width="4"/>
+      <rect x="30" y="44" width="100" height="128" rx="18" fill="#fff" stroke="#26A69A" stroke-width="4"/>
+      <g clip-path="url(#bagclip)"><rect id="fluid" x="30" y="44" width="100" height="128" fill="#80DEEA"/></g>
+      <text x="80" y="115" text-anchor="middle" font-size="20" font-weight="700" fill="#00796B">IV</text>
+      <rect x="68" y="172" width="24" height="12" fill="#B0BEC5"/>
+      <rect x="62" y="184" width="36" height="34" rx="8" fill="#fff" stroke="#26A69A" stroke-width="3"/>
+      <circle class="drop" cx="80" cy="192" r="4" fill="#4DD0E1"/>
+      <line x1="80" y1="218" x2="80" y2="248" stroke="#90A4AE" stroke-width="3"/>
+    </svg>
+    <div id="busyTimer"></div>
+    <div id="busyMsg">Processing…</div>
+    <div class="info">Please wait, do not close this page</div>
   </div>
 
   <script>
@@ -165,7 +201,22 @@
     ];
     let SECTIONS = NICU_SECTIONS;
     $('idxList').innerHTML = SECTIONS.filter(x => x[0] !== 'other').map(([k, l], i) => `<span id="i_${k}">${i + 1}. ${esc(l)}</span>`).join('') + '<span id="i_cw">Current weight</span>';
-    function markIdx() { SECTIONS.forEach(([k]) => { const e = $('i_' + k); if (e) e.classList.toggle('done', !!$('f_' + k).value.trim()); }); if ($('i_cw')) $('i_cw').classList.toggle('done', !!$('current_weight').value.trim()); }
+    function fieldHtml(k, l) { return `<div class="fg" id="g_${k}"><div class="frow"><label for="f_${k}">${esc(l)}</label><button type="button" class="fmic" id="m_${k}" onclick="voiceField('${k}')">&#127908; Speak</button></div><textarea id="f_${k}" rows="2" oninput="markIdx()"></textarea></div>`; }
+    function flagCheck() { SECTIONS.forEach(([k]) => { const g = $('g_' + k), f = $('f_' + k); if (g && f) g.classList.toggle('flag', f.value.includes('[?')); }); }
+    let busyT = null, busyI = null;
+    function showBusy(msg, ms, onTimeout) {
+      const b = $('busy'), limit = ms === undefined ? 12000 : ms;
+      $('busyMsg').innerText = msg; b.classList.toggle('timed', limit > 0);
+      b.style.setProperty('--d', (limit || 12000) + 'ms');
+      const f = $('fluid'); f.style.animation = 'none'; void f.getBoundingClientRect(); f.style.animation = '';
+      b.style.display = 'flex'; clearTimeout(busyT); clearInterval(busyI);
+      const t0 = Date.now(), tm = $('busyTimer');
+      if (limit > 0) { tm.innerText = Math.ceil(limit / 1000) + ' s'; busyI = setInterval(() => { tm.innerText = Math.max(0, Math.ceil((limit - (Date.now() - t0)) / 1000)) + ' s'; }, 200); }
+      else tm.innerText = '';
+      busyT = setTimeout(() => { hideBusy(); if (limit > 0 && onTimeout) onTimeout(); }, limit > 0 ? limit : 60000);
+    }
+    function hideBusy() { clearTimeout(busyT); clearInterval(busyI); $('busy').style.display = 'none'; }
+    function markIdx() { flagCheck(); SECTIONS.forEach(([k]) => { const e = $('i_' + k); if (e) e.classList.toggle('done', !!$('f_' + k).value.trim()); }); if ($('i_cw')) $('i_cw').classList.toggle('done', !!$('current_weight').value.trim()); }
     const COLMAP = { ga: 'gestational_age', age: 'age_text' };
     let TEMPLATE = 'nicu', DEMO = ['sex','dob','ga','birth_weight','admission_weight'];
     const NICU_HINT = "Example: Baby is stable, no fever. On room air, SpO2 98%. HR 140, CRT 2 sec. Abdomen soft. Feeds EBM 8 ml 2 hourly, no vomiting. Continue antibiotics day 3. Parents counselled.";
@@ -177,7 +228,7 @@
       document.querySelectorAll('.ta').forEach(e => e.style.display = t === 'nicu' ? 'none' : '');
       $('chartTitle').innerText = t === 'nicu' ? 'NICU / PICU IPD Chart' : 'IPD Chart (General Ward / ICU / CCU)';
       $('idxList').innerHTML = SECTIONS.filter(x => x[0] !== 'other').map(([k, l], i) => `<span id="i_${k}">${i + 1}. ${esc(l)}</span>`).join('') + (t === 'nicu' ? '<span id="i_cw">Current weight</span>' : '');
-      $('fields').innerHTML = SECTIONS.map(([k, l, g], i) => (g && (i === 0 || SECTIONS[i - 1][2] !== g) ? `<h4 style="margin:14px 0 8px;color:#26A69A;">${esc(g)}</h4>` : '') + `<div class="fg"><label for="f_${k}">${esc(l)}</label><textarea id="f_${k}" rows="2"></textarea></div>`).join('');
+      $('fields').innerHTML = SECTIONS.map(([k, l, g], i) => (g && (i === 0 || SECTIONS[i - 1][2] !== g) ? `<h4 style="margin:14px 0 8px;color:#26A69A;">${esc(g)}</h4>` : '') + `${fieldHtml(k, l)}`).join('');
       $('dictation').placeholder = t === 'nicu' ? NICU_HINT : ADULT_HINT;
     }
 
@@ -191,7 +242,7 @@
     async function logout() { await supabaseClient.auth.signOut(); location.href = "index.html"; }
 
     /* ---------- build fields ---------- */
-    $('fields').innerHTML = SECTIONS.map(([k, l]) => `<div class="fg"><label for="f_${k}">${esc(l)}</label><textarea id="f_${k}" rows="2"></textarea></div>`).join('');
+    $('fields').innerHTML = SECTIONS.map(([k, l]) => `${fieldHtml(k, l)}`).join('');
 
     /* ---------- init / patients ---------- */
     async function init() {
@@ -238,34 +289,61 @@
     }
 
     /* ---------- voice ---------- */
-    let mediaRec = null, chunks = [], recStream = null, recTimer = null;
-    async function toggleVoice() {
-      const btn = $('micBtn'), st = $('aiStatus');
-      if (mediaRec && mediaRec.state === 'recording') { mediaRec.stop(); return; }
+    let mediaRec = null, chunks = [], recStream = null, recTimer = null, recBtn = null, recIdle = '';
+    const blobToB64 = blob => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+    async function recordAudio(btn, idleHtml, recHtml, onBlob, onShort) {
+      if (mediaRec && mediaRec.state === 'recording') {
+        if (recBtn === btn) mediaRec.stop(); else alert('Finish the current recording first (tap its red button).');
+        return;
+      }
       if (!navigator.mediaDevices || !window.MediaRecorder) { alert('Recording is not supported in this browser. Use Chrome, or the Backup voice button.'); return; }
       try { recStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
       catch (e) { alert('Microphone permission denied. Allow microphone access and try again.'); return; }
-      chunks = []; mediaRec = new MediaRecorder(recStream, { audioBitsPerSecond: 24000 });
+      chunks = []; recBtn = btn; recIdle = idleHtml;
+      mediaRec = new MediaRecorder(recStream, { audioBitsPerSecond: 24000 });
       mediaRec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
       mediaRec.onstop = async () => {
         clearTimeout(recTimer); recStream.getTracks().forEach(t => t.stop());
-        btn.classList.remove('rec'); btn.innerHTML = '&#127908; Start Voice';
+        recBtn.classList.remove('rec'); recBtn.innerHTML = recIdle;
         const blob = new Blob(chunks, { type: mediaRec.mimeType || 'audio/webm' });
-        if (blob.size < 1500) { st.className = 'err'; st.innerText = 'Recording too short. Please try again.'; return; }
-        st.className = 'info'; st.innerText = 'Transcribing and sorting…'; window._t0 = Date.now();
+        if (blob.size < 1500) { (onShort || (() => alert('Recording too short. Please try again.')))(); return; }
+        await onBlob(blob);
+      };
+      mediaRec.start(); btn.classList.add('rec'); btn.innerHTML = recHtml;
+      recTimer = setTimeout(() => { if (mediaRec.state === 'recording') mediaRec.stop(); }, 120000);
+    }
+    function toggleVoice() {
+      const st = $('aiStatus');
+      recordAudio($('micBtn'), '&#127908; Start Voice', '&#128308; Recording… tap to stop', async blob => {
+        st.className = 'info'; st.innerText = 'Transcribing and sorting…'; window._t0 = Date.now(); const ac = new AbortController(); showBusy('Transcribing and sorting… please wait', 12000, () => ac.abort());
         try {
-          const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+          const b64 = await blobToB64(blob);
           const { data } = await supabaseClient.auth.getSession();
-          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type, sort: true, chart: TEMPLATE, prior: $('dictation').value }) });
-          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed'); window._tTrans = ((Date.now() - window._t0) / 1000).toFixed(1);
+          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type, sort: true, chart: TEMPLATE, prior: $('dictation').value }), signal: ac.signal });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed');
           const f = $('dictation'); f.value += (f.value && !/\s$/.test(f.value) ? ' ' : '') + j.text;
           if (!j.text.trim()) { st.className = 'err'; st.innerText = 'No speech detected. Please try again.'; }
-          else if (j.fields) applyFields(j.fields);
-          else sortWithAI();
-        } catch (e) { st.className = 'err'; st.innerText = 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
-      };
-      mediaRec.start(); btn.classList.add('rec'); btn.innerHTML = '&#128308; Recording… tap to stop';
-      recTimer = setTimeout(() => { if (mediaRec.state === 'recording') mediaRec.stop(); }, 120000);
+          else if (j.fields) applyFields(j.fields, j.ms);
+          else await sortWithAI();
+        } catch (e) { st.className = 'err'; st.innerText = e.name === 'AbortError' ? 'Took longer than 12 seconds. Check the network and record again, or type the note.' : 'Speech engine failed: ' + e.message + ' (you can type, or use Backup voice).'; }
+        finally { hideBusy(); }
+      }, () => { st.className = 'err'; st.innerText = 'Recording too short. Please try again.'; });
+    }
+    function voiceField(k) {
+      const label = (SECTIONS.find(x => x[0] === k) || [k, k])[1];
+      recordAudio($('m_' + k), '&#127908; Speak', '&#128308; Stop', async blob => {
+        const ac = new AbortController(); showBusy('Updating "' + label + '"… please wait', 12000, () => ac.abort());
+        try {
+          const b64 = await blobToB64(blob);
+          const { data } = await supabaseClient.auth.getSession();
+          const r = await fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ audio: b64, mime: blob.type, sort: true, chart: TEMPLATE, field: k }), signal: ac.signal });
+          const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Transcription failed');
+          const v = ((j.fields && j.fields[k]) || j.text || '').trim();
+          if (!v) alert('No speech detected. Please try again.');
+          else { $('f_' + k).value = v; markIdx(); }
+        } catch (e) { alert(e.name === 'AbortError' ? 'Took longer than 12 seconds. Check the network and try again, or type this box.' : 'Could not update this box: ' + e.message + ' (you can type instead).'); }
+        finally { hideBusy(); }
+      });
     }
     function toggleBrowserVoice() {
       const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -291,21 +369,21 @@
     }
 
     /* ---------- AI sorting ---------- */
-    function applyFields(fields) {
+    function applyFields(fields, ms) {
       const st = $('aiStatus'); let n = 0;
       SECTIONS.forEach(([k]) => { if (fields[k]) { $('f_' + k).value = fields[k]; n++; } });
       if (fields.current_weight) $('current_weight').value = fields.current_weight;
       markIdx();
-      st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing. [Total ' + ((Date.now() - window._t0) / 1000).toFixed(1) + ' s]';
+      st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing. [Total ' + ((Date.now() - window._t0) / 1000).toFixed(1) + ' s' + (ms ? ' = speech ' + ms.stt + ' + sort ' + ms.sort : '') + ']';
       $('fieldsCard').scrollIntoView({ behavior: 'smooth' });
     }
     async function sortWithAI() {
       const text = $('dictation').value.trim(), st = $('aiStatus');
       if (!text) { st.className = 'err'; st.innerText = 'Type or speak something first.'; return; }
-      $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…'; window._s0 = Date.now();
+      $('aiBtn').disabled = true; st.className = 'info'; st.innerText = 'Sorting with AI…'; window._s0 = Date.now(); const ac = new AbortController(); showBusy('Sorting with AI… please wait', 12000, () => ac.abort());
       try {
         const { data } = await supabaseClient.auth.getSession();
-        const r = await fetch('/api/sort', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ text, chart: TEMPLATE }) });
+        const r = await fetch('/api/sort', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (data.session ? data.session.access_token : '') }, body: JSON.stringify({ text, chart: TEMPLATE }), signal: ac.signal });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || 'AI request failed');
         let n = 0;
@@ -314,8 +392,8 @@
         markIdx();
         st.className = 'ok'; st.innerText = n + ' section(s) filled. Please check them below before printing. [Transcribe ' + (window._tTrans || '-') + ' s, Sort ' + ((Date.now() - window._s0) / 1000).toFixed(1) + ' s]'; window._tTrans = null;
         $('fieldsCard').scrollIntoView({ behavior: 'smooth' });
-      } catch (e) { st.className = 'err'; st.innerText = 'AI sorting failed: ' + e.message; }
-      $('aiBtn').disabled = false;
+      } catch (e) { st.className = 'err'; st.innerText = e.name === 'AbortError' ? 'Took longer than 12 seconds. Check the network and press Done again, or fill the boxes by typing.' : 'AI sorting failed: ' + e.message; }
+      $('aiBtn').disabled = false; hideBusy();
     }
 
     /* ---------- signature ---------- */
@@ -372,7 +450,7 @@
       if (!SECTIONS.some(([k]) => c.sections[k])) { status('Fill at least one section first.', false); return; }
       if (!sigImg && !profile && !confirm('No signature saved. Print without a signature?')) return;
       if (SECTIONS.some(([k]) => c.sections[k].includes('[?')) && !confirm('Some text is marked [?] (unclear). Remove the [?] after checking it. Print anyway?')) return;
-      $('pdfBtn').disabled = true; let msg = '';
+      $('pdfBtn').disabled = true; let msg = ''; showBusy('Saving the chart and creating the PDF… please wait', 0);
       const demo = {};
       DEMO.map(id => [id, COLMAP[id] || id]).forEach(([id, col]) => { const el = $(id); if (!el.disabled && el.value.trim()) demo[col] = el.value.trim(); });
       const r1 = Object.keys(demo).length ? await supabaseClient.from('Patients').update(demo).eq('mrd', p.mrd) : {};
@@ -387,7 +465,7 @@
       else { const ins = await supabaseClient.from('daily_photos').insert([{ mrd: p.mrd, photo_date: day, photo_type: 'IPD Chart', photo_url: path, file_type: 'pdf', geo_location: '', uploaded_by: userEmail }]); if (ins.error) msg += ' Could not add to daily photos: ' + ins.error.message + '.'; }
       const a = document.createElement('a'); a.href = URL.createObjectURL(out.blob); a.download = out.name; a.click();
       status(msg || 'Chart saved and PDF generated.', !msg);
-      $('pdfBtn').disabled = false;
+      $('pdfBtn').disabled = false; hideBusy();
     }
 
     function buildPdf(p, c, sig) {

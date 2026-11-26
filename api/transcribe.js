@@ -19,7 +19,7 @@ const TERMS_NICU = [
 
 
 const TERMS_ADULT = [
-  "GRBS","ECG","troponin","creatinine","urea","hemoglobin","TLC","platelets","CRP","LFT","RFT","sodium","potassium",
+  "afebrile","febrile","GRBS","ECG","troponin","creatinine","urea","hemoglobin","TLC","platelets","CRP","LFT","RFT","sodium","potassium",
   "GCS","pallor","icterus","edema","tachycardia","bradycardia","crepitations","rhonchi","wheeze","bowel sounds",
   "hepatomegaly","splenomegaly","ascites","Foley catheter","RT feed","central line","ventilator","BiPAP","CPAP",
   "noradrenaline","dopamine","dobutamine","midazolam","fentanyl","pantoprazole","ceftriaxone","piperacillin","tazobactam",
@@ -54,19 +54,23 @@ module.exports = async (req, res) => {
     const chart = req.body && req.body.chart === "adult" ? "adult" : "nicu";
     const terms = chart === "adult" ? TERMS_ADULT : TERMS_NICU;
 
+    const tA = Date.now();
     let r = await deepgram(buf, mime, process.env.DEEPGRAM_MODEL || "nova-3-medical", terms);
     if (!r.ok && r.status === 400) r = await deepgram(buf, mime, "nova-3", terms); // fallback if the medical model/options are rejected
     const j = await r.json();
     if (!r.ok) return res.status(502).json({ error: (j.err_msg || j.message || "Speech service error") });
     const alt = j.results && j.results.channels && j.results.channels[0] && j.results.channels[0].alternatives && j.results.channels[0].alternatives[0];
     const text = (alt && alt.transcript) || "";
+    const tB = Date.now();
     const out = { text };
     if (req.body.sort && text.trim()) { // one-step: sort in the same request (saves a round trip)
       try {
-        const prior = String(req.body.prior || "").slice(0, 6000);
-        out.fields = await require("./sort.js").sortText((prior ? prior + " " : "") + text, chart);
+        const field = String(req.body.field || "");
+        const prior = field ? "" : String(req.body.prior || "").slice(0, 6000);
+        out.fields = await require("./sort.js").sortText((prior ? prior + " " : "") + text, chart, field);
       } catch (e) { out.sortError = e.message; }
     }
+    out.ms = { stt: ((tB - tA) / 1000).toFixed(1), sort: ((Date.now() - tB) / 1000).toFixed(1) };
     return res.status(200).json(out);
   } catch (e) {
     return res.status(500).json({ error: "Could not transcribe: " + e.message });
